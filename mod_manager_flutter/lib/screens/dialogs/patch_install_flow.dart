@@ -29,7 +29,6 @@ import '../../models/app_notification.dart';
 import '../../models/character_info.dart';
 import '../../models/gamebanana/gamebanana.dart';
 import '../../models/mod_download.dart';
-import '../../models/origin_enums.dart';
 import '../../services/api_service.dart';
 import '../../services/folder_contents.dart';
 import '../../services/library_file_index.dart';
@@ -37,6 +36,7 @@ import '../../services/log/confirmations.dart';
 import '../../services/log/logger.dart';
 import '../../services/origin_write.dart';
 import '../../services/patch_destination_ranking.dart';
+import '../../services/patch_detection.dart';
 import '../../services/patch_placement.dart';
 import '../../services/patch_record.dart';
 import '../../services/patch_scan.dart';
@@ -46,6 +46,8 @@ import '../../utils/zzz_characters.dart';
 import 'apply_update_flow.dart';
 import 'import_selection_dialog.dart';
 import 'patch_install_prompt.dart';
+
+export '../../services/patch_record.dart' show PatchIdentity;
 
 /// The mods [plan] is about to create, in the shape the copy will create them.
 ///
@@ -69,48 +71,6 @@ List<PlannedMod> plannedMods(ImportPlan plan, List<String> folders, {Map<String,
             for (final dir in folders)
               PlannedMod(name: names[dir] ?? path.basename(dir), sources: {dir: ''}),
           ];
-
-/// The patch's **own** remote identity, for the installs that have one.
-///
-/// A Marketplace download knows exactly which mod page and file it is, and that is what gets recorded against the mod it is written into.
-/// A folder dragged off a disk has no page at all, so its layer records only the files it wrote and cannot be checked for updates.
-/// The install is the same operation either way; only the bookkeeping differs.
-class PatchIdentity {
-  const PatchIdentity({
-    required this.modId,
-    this.name,
-    this.fileId,
-    this.version,
-    this.versionLabel,
-    this.archiveMd5,
-  });
-
-  final int modId;
-
-  /// The patch's mod page title, for the layer's `name`.
-  final String? name;
-  final int? fileId;
-  final String? version;
-  final String? versionLabel;
-  final String? archiveMd5;
-
-  /// **At `exact` on both axes**, which this is the one route to for a layer the
-  /// user did not identify by hand: every other one is somebody telling us about
-  /// bytes they moved in themselves.
-  ///
-  /// No `role`: it is taken from the position the layer lands in, and the write
-  /// that places it is what knows that.
-  ModDownload get layer => ModDownload(
-        modId: modId,
-        modIdConfidence: OriginConfidence.exact,
-        name: name,
-        fileId: fileId,
-        version: version,
-        versionLabel: versionLabel,
-        versionConfidence: OriginConfidence.exact,
-        archiveMd5: archiveMd5,
-      );
-}
 
 /// One patch write the install has worked out and not yet performed.
 class PatchWrite {
@@ -297,6 +257,8 @@ class PatchQuestion {
 
 /// Reads what the patch prompt for [scan]'s patch-shaped mods offers: the library and each patch's likeliest
 /// destinations. Shared by the drop's import and a waiting download's answer, so the two offer the same.
+///
+/// [library] is for a question asked outside an install, where the library the app holds is current.
 Future<PatchQuestion> preparePatchQuestion({
   required PlannedPatchScan scan,
   required bool combined,
@@ -304,12 +266,11 @@ Future<PatchQuestion> preparePatchQuestion({
   int? patchModId,
   int? patchFileId,
   List<GbRequirement> patchRequirements = const <GbRequirement>[],
+  List<ModInfo>? library,
 }) async {
-  // **Read here rather than handed in**, and after the scan has established
-  // there is something to ask about — so an ordinary install pays nothing for
-  // it. See [_libraryNow]: what this prompt lists has to be the library as it
-  // is when the prompt opens.
-  final library = await _libraryNow();
+  // **Read here rather than handed in** for an install, and after the scan has established there is something to ask about,
+  // so an ordinary install pays nothing for it. See [_libraryNow]: what this prompt lists has to be the library as it is when the prompt opens.
+  library ??= await _libraryNow();
 
   // Only where a library destination is on offer at all: a combined install
   // does not get that choice, so the walk would have no reader.
@@ -332,6 +293,7 @@ Future<PatchQuestion> preparePatchQuestion({
           patchFileId: patchFileId,
           kind: scan.assetPatches.containsKey(name) ? PatchKind.assets : PatchKind.references,
           destinations: ranked[name] ?? const <DestinationRank>[],
+          missingFiles: patchFilesNamed(scan.contents[name] ?? FolderContents.empty, assets: scan.assetPatches.containsKey(name)),
         ),
     ],
     library: library,
@@ -339,6 +301,21 @@ Future<PatchQuestion> preparePatchQuestion({
     ranked: ranked,
   );
 }
+
+/// What the patch window lists under its disclosure, lower-cased basenames sorted:
+/// for a patch by its `.ini`, what that `.ini` asks for and [contents] does not carry; for a patch of game files alone ([assets]), those files.
+List<String> patchFilesNamed(FolderContents contents, {required bool assets}) => patchWindowNames(assets
+    ? contents.files.where(isGameAsset)
+    : assessPatchShape(
+        references: contents.references,
+        files: contents.files,
+        directories: contents.directories,
+        hasIni: contents.hasIni,
+      ).missing);
+
+/// [paths] as the patch window lists them: lower-cased basenames, each once, sorted.
+List<String> patchWindowNames(Iterable<String> paths) =>
+    {for (final file in paths) path.basename(file).toLowerCase()}.toList()..sort();
 
 /// Logs the patch prompt's answer where it is consumed: a decline as loudly as an accept, and per subject where it
 /// went and how the ranking had placed that folder — the only evidence that will ever accumulate about whether the

@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/installed_file.dart';
 import 'package:mod_manager_flutter/models/mod_download.dart';
@@ -17,6 +19,7 @@ import 'package:mod_manager_flutter/services/download/download_job.dart';
 import 'package:mod_manager_flutter/services/download/download_queue.dart';
 import 'package:mod_manager_flutter/services/download/download_request.dart';
 import 'package:mod_manager_flutter/services/download/update_job.dart';
+import 'package:mod_manager_flutter/services/log/logger.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_applier.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_layout.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_prepare.dart';
@@ -26,8 +29,12 @@ import 'package:mod_manager_flutter/services/update_check.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 import 'package:path/path.dart' as p;
 
+import 'support/all_mods_harness.dart';
 import 'support/held_write.dart';
+import 'support/localized_harness.dart';
+import 'support/log_capture.dart';
 import 'support/origin_shorthand.dart';
+import 'support/recording_queue.dart';
 import 'support/recording_service.dart';
 import 'support/seeded_queue.dart';
 import 'support/temp_library.dart';
@@ -143,6 +150,25 @@ void main() {
       expect(temp.read(modName, 'Body.dds'), 'v1');
     });
 
+    test('a patch-shaped file of several folders is not asked about, since no answer could place it, and the write refuses it',
+        () async {
+      await installed();
+      final job = landed(zip('parts.zip', {'Part1/Ellen.ini': ini, 'Part2/Extra.ini': ini}));
+      final asks = await prepareUpdateJob(container, job) as UpdateStageAsks;
+      addTearDown(() => deleteKept(asks.prepared));
+      expect(asks.wait.question, UpdateQuestionKind.folders);
+      final kept = asks.prepared! as UpdateRunKept;
+      final both = kept.withPickedFolders([for (final choice in kept.foldersQuestion!.choices) choice.path]);
+
+      final ready = await prepareUpdateJob(container, job.copyWith(prepared: both));
+      expect(ready, isA<UpdateStageReady>(), reason: 'no patch question is asked');
+      final result = await writeUpdateJob(container, unpacked(job, ready as UpdateStageReady));
+      expect((result as UpdateStageFailed).failure.kind, UpdateFailureKind.refused);
+      expect(resultFor(result, modName).end, UpdateModEnd.refused);
+      expect(temp.read(modName, 'Body.dds'), 'v1', reason: 'never written by the wipe');
+      expect(temp.read(modName, 'Ellen.ini'), ini);
+    });
+
     test('a patch in the folder that nothing records', () async {
       await installed(recorded: origin(patches: [patchFixture(fileId: 9)]));
       final result = await prepareUpdateJob(container, landed(plainZip()));
@@ -159,6 +185,31 @@ void main() {
         return null;
       }
     }).whereType<String>().firstOrNull;
+
+    test('a folders question drops a pick kept from before it, whose paths name another unpack', () async {
+      await installed();
+      final job = landed(zip('two.zip', {'A/A.ini': ini, 'B/B.ini': ini}))
+          .copyWith(prepared: const UpdateRunKept(pickedFolders: ['/elsewhere/A']));
+      final asks = await prepareUpdateJob(container, job) as UpdateStageAsks;
+      addTearDown(() => deleteKept(asks.prepared));
+      expect(asks.wait.question, UpdateQuestionKind.folders);
+      final kept = asks.prepared! as UpdateRunKept;
+      expect(kept.foldersQuestion, isNotNull);
+      expect(kept.pickedFolders, isNull);
+    });
+
+    test('reading which mods are left out logs no skip for a first mod that is not there; the stage that skips it does', () async {
+      final capture = LogCapture();
+      Log.install(LogRouter(sinks: [capture]));
+      addTearDown(() => Log.install(LogRouter()));
+      int notThere() => capture.records.where((r) => r.message == 'update skipped, the mod is not there').length;
+      final job = landed(plainZip());
+
+      expect(await modsLeftOut(container, job), isEmpty);
+      expect(notThere(), 0);
+      expect((await prepareUpdateJob(container, job) as UpdateStageSkipped).reason, UpdateSkipReason.modGone);
+      expect(notThere(), 1);
+    });
 
     test('a locked archive, before anything is unpacked, and the archive is kept for the password', () async {
       await installed();
@@ -228,7 +279,8 @@ void main() {
       await installed();
       final uid = (await container.read(libraryProvider.future)).firstWhere((m) => m.id == modName).uid;
       expect(uid, isNotNull, reason: 'a scanned mod has a uid');
-      final job = landed(plainZip(), mods: [UpdateMod(modId: modName, layer: const DownloadKey.base(100), uid: uid)]);
+      final job = landed(plainZip(),
+          mods: [UpdateMod(modId: modName, layer: const DownloadKey.base(100), uid: uid, heldFileId: 1)]);
       final ready = await prepared(job);
 
       temp.modFolder(modName).renameSync(p.join(temp.mods.path, 'Ellen Renamed'));
@@ -534,6 +586,196 @@ void main() {
     }
   });
 
+  group('the answers (docs/update-runs.md §6)', () {
+    const patchIni = '[TextureOverrideBody]\nhash = 2\nps-t0 = ResourceBody\n\n[ResourceBody]\nfilename = Body.dds\n';
+    final listed = DateTime.utc(2026, 4, 1);
+    final picked = DateTime.utc(2026, 3, 1);
+
+    /// Ellen's update whose file is a patch, picked from a check that listed a later file too, so its Ignore would dismiss up to [listed].
+    /// [published] is the file list the job carries, the check's own by default.
+    DownloadJob patchJob({List<GbFile>? published, DateTime? dismissUpTo}) {
+      final job = landed(zip('patch.zip', {'Ellen Fix/Ellen.ini': patchIni}), published: picked);
+      return job.copyWith(
+        update: UpdateTask(
+          mods: [baseOf(modName, 100, heldFileId: 1, dismissUpTo: dismissUpTo ?? listed)],
+          published: published ?? [job.file, GbFile(idRow: 3, dateAdded: listed)],
+        ),
+      );
+    }
+
+    /// The patch question [job]'s unpack stops at, answered with [answer], and the preview made again with it.
+    Future<UpdateStageReady> answered(DownloadJob job, UpdateModAnswer answer) async {
+      final asks = await prepareUpdateJob(container, job) as UpdateStageAsks;
+      addTearDown(() => deleteKept(asks.prepared));
+      final kept = asks.prepared! as UpdateRunKept;
+      final again = await prepareUpdateJob(container, job.copyWith(prepared: kept.withAnswer(asks.wait.modId!, answer)));
+      expect(again, isA<UpdateStageReady>(), reason: 'an answered question is not asked again at the next preview');
+      return again as UpdateStageReady;
+    }
+
+    test('the patch question is about the mod, and shows what its .ini asks for', () async {
+      await installed();
+      final asks = await prepareUpdateJob(container, patchJob()) as UpdateStageAsks;
+      addTearDown(() => deleteKept(asks.prepared));
+      expect(asks.wait.question, UpdateQuestionKind.patchShaped);
+      expect(asks.wait.modId, modName);
+      final finding = (asks.prepared! as UpdateRunKept).patchQuestion!;
+      expect(finding.modId, modName);
+      expect(finding.sources, hasLength(1));
+      expect(finding.missing.map((name) => p.basename(name).toLowerCase()), contains('body.dds'));
+    });
+
+    test('Put it on top places the file as a patch layer, keeps the files, and dismisses the files listed on the base', () async {
+      await installed();
+      final job = patchJob();
+      final ready = await answered(job, const PlaceAsPatch(modName));
+      container.read(modUpdateChecksProvider.notifier).state = {
+        modName: const UpdateCheck(outcome: UpdateOutcome.updateAvailable, subject: DownloadKey.base(100)),
+      };
+
+      final result = await writeUpdateJob(container, unpacked(job, ready));
+      expect((result as UpdateStageWritten).outcome, JobOutcome.patchAdded);
+      expect(resultFor(result, modName).patchAdded, isTrue);
+      expect(temp.read(modName, 'Ellen.ini'), patchIni, reason: 'the patch went on top');
+      expect(temp.read(modName, 'Body.dds'), 'v1', reason: 'placed, never written by the wipe');
+      expect(temp.snapshotsOf(modName), hasLength(1), reason: 'snapshot first');
+
+      final stack = (await service.readModOrigin(modName))!.downloads;
+      expect(stack, hasLength(2));
+      expect(stack.last.modId, 100);
+      expect(stack.last.fileId, 2);
+      expect(stack.last.modIdConfidence, OriginConfidence.exact);
+      expect(stack.last.updatesDismissedUntil, listed, reason: 'the file listed above the pick was passed over');
+      expect(stack.first.fileId, 1, reason: 'the base layer is the file it was');
+      expect(stack.first.updatesDismissedUntil, listed, reason: 'the value Ignore writes: the newest file the check listed');
+
+      expect(container.read(modUpdateChecksProvider).containsKey(modName), isFalse);
+      expect((result.report! as UpdateReport).removedMarks.keys, [modName],
+          reason: 'the row keeps the mark the write removed, so it reads "Patch added"');
+    });
+
+    test('the base dismissal is what Ignore writes for the check, whatever file list the job carries', () async {
+      await installed();
+      final check = UpdateCheck(
+        outcome: UpdateOutcome.updateAvailable,
+        subject: const DownloadKey.base(100),
+        newerFiles: [GbFile(idRow: 2, dateAdded: picked), GbFile(idRow: 3, dateAdded: listed)],
+      );
+      final later = DateTime.utc(2026, 5, 1);
+      // Not the check's own list: it holds a file published after the check listed its files.
+      final job = patchJob(
+        published: [GbFile(idRow: 2, dateAdded: picked), GbFile(idRow: 3, dateAdded: listed), GbFile(idRow: 4, dateAdded: later)],
+        dismissUpTo: check.dismissableUpTo,
+      );
+      final ready = await answered(job, const PlaceAsPatch(modName));
+
+      final result = await writeUpdateJob(container, unpacked(job, ready));
+      expect((result as UpdateStageWritten).outcome, JobOutcome.patchAdded);
+      final base = (await service.readModOrigin(modName))!.downloads.first;
+      expect(base.updatesDismissedUntil, check.dismissableUpTo);
+      expect(base.updatesDismissedUntil, isNot(later), reason: 'a file the check never listed is not dismissed');
+    });
+
+    test('a different mod has the patch put on top of it, marked as being written while it lands, and the mod keeps its mark',
+        () async {
+      await installed();
+      temp.write('Miyabi', 'Ellen.ini', ini);
+      temp.write('Miyabi', 'Body.dds', 'm1');
+      await temp.writeOrigin('Miyabi', originFixture(modId: 200, modIdConfidence: OriginConfidence.exact, fileId: 7));
+      final job = patchJob();
+      final ready = await answered(job, const PlaceAsPatch('Miyabi'));
+      container.read(modUpdateChecksProvider.notifier).state = {
+        modName: const UpdateCheck(outcome: UpdateOutcome.updateAvailable, subject: DownloadKey.base(100)),
+        'Miyabi': const UpdateCheck(outcome: UpdateOutcome.upToDate),
+      };
+      final marked = <Set<String>>[];
+      container.listen(modWritesInProgressProvider, (_, next) => marked.add(next));
+
+      final result = await writeUpdateJob(container, unpacked(job, ready));
+      expect((result as UpdateStageSkipped).reason, UpdateSkipReason.patchAddedElsewhere);
+      expect(resultFor(result, modName).patchedInto, 'Miyabi');
+      expect(marked.any((writing) => writing.contains('Miyabi')), isTrue, reason: 'the second folder is marked for the write');
+      expect(container.read(modWritesInProgressProvider), isEmpty);
+
+      expect(temp.read('Miyabi', 'Ellen.ini'), patchIni);
+      expect(temp.read('Miyabi', 'Body.dds'), 'm1');
+      expect((await service.readModOrigin('Miyabi'))!.downloads.last.modId, 100);
+      expect(temp.read(modName, 'Ellen.ini'), ini, reason: 'the mod the update was for is not written');
+      expect(temp.snapshotsOf(modName), isEmpty);
+      expect((await service.readModOrigin(modName))!.downloads.single.updatesDismissedUntil, isNull,
+          reason: 'it keeps its update mark, as a skip does');
+      expect(container.read(modUpdateChecksProvider).keys, [modName], reason: "the other mod's verdict named its old layers");
+    });
+
+    test('Update anyway at an unrecorded patch is kept, and the update is written', () async {
+      await installed(recorded: origin(patches: [patchFixture(fileId: 9)]));
+      final job = landed(plainZip());
+      final ready = await answered(job, const UpdateAnyway());
+
+      final result = await writeUpdateJob(container, unpacked(job, ready));
+      expect((result as UpdateStageWritten).outcome, JobOutcome.updated);
+      expect(temp.read(modName, 'Body.dds'), 'v2');
+    });
+
+    testWidgets('the press of Update N carries the dismissal Ignore writes for the check, and "Patch added" writes it on the base',
+        (t) async {
+      await t.runAsync(installed);
+      final check = UpdateCheck(
+        outcome: UpdateOutcome.updateAvailable,
+        subject: const DownloadKey.base(100),
+        newerFiles: [GbFile(idRow: 2, file: 'ellen2.zip', dateAdded: picked), GbFile(idRow: 3, file: 'ellen3.zip', dateAdded: listed)],
+      );
+      final queue = RecordingQueue();
+      final ellen = ModInfo(id: modName, name: modName, characterId: 'ellen', isActive: false, origin: origin());
+      final table = await pumpAllModsTable(t, [ellen], overrides: [downloadQueueProvider.overrideWith(() => queue), ...service.overrides]);
+      table.read(modUpdateChecksProvider.notifier).state = {modName: check};
+      await t.pumpAndSettle();
+      // The list reads the mod's sidecar as it opens.
+      await tapWithIo(t, find.widgetWithText(FilledButton, 'Update 1'));
+      await t.tap(find.text('ellen2.zip'));
+      await t.pumpAndSettle();
+      await tapWithIo(t, find.widgetWithText(FilledButton, 'Update 1 mod'));
+
+      final press = queue.pressed.single.single;
+      expect(press.task.primary.dismissUpTo, check.dismissableUpTo, reason: 'read from the check when the press is made');
+
+      final result = await t.runAsync(() async {
+        final job = DownloadJob(
+          seq: 1,
+          request: DownloadRequest(url: Uri.parse('https://gamebanana.com/dl/${press.file.idRow}')),
+          intent: DownloadIntent.update,
+          subject: press.subject,
+          file: press.file,
+          state: DownloadJobState.updating,
+          updateStep: UpdateStep.unpacking,
+          result: DownloadResult(file: zip('patch.zip', {'Ellen Fix/Ellen.ini': patchIni}), totalBytes: 1),
+          update: press.task,
+        );
+        // The stages run in the real event loop, through the library the test's own container reads from the disk.
+        final asks = await prepareUpdateJob(container, job) as UpdateStageAsks;
+        addTearDown(() => deleteKept(asks.prepared));
+        final kept = (asks.prepared! as UpdateRunKept).withAnswer(modName, const PlaceAsPatch(modName));
+        final ready = await prepareUpdateJob(container, job.copyWith(prepared: kept)) as UpdateStageReady;
+        return writeUpdateJob(container, unpacked(job, ready));
+      });
+      expect((result! as UpdateStageWritten).outcome, JobOutcome.patchAdded);
+      final base = (await t.runAsync(() => service.readModOrigin(modName)))!.downloads.first;
+      expect(base.updatesDismissedUntil, check.dismissableUpTo);
+    });
+
+    test('a mod ignored while its job waited asks nothing and is not unpacked', () async {
+      await installed();
+      final archive = plainZip();
+      container.read(modUpdateChecksProvider.notifier).state = {
+        modName: const UpdateCheck(outcome: UpdateOutcome.updateAvailable, dismissed: true, subject: DownloadKey.base(100)),
+      };
+
+      final result = await prepareUpdateJob(container, landed(archive));
+      expect((result as UpdateStageSkipped).reason, UpdateSkipReason.ignoredMeanwhile);
+      expect(archive.existsSync(), isTrue, reason: 'it was never unpacked; the queue deletes it as the job ends');
+    });
+  });
+
   group('a job of several mods says what came of each', () {
     final published = DateTime(2026, 1, 1);
     const names = ['Ellen', 'Miyabi', 'Soukaku', 'Nicole'];
@@ -641,6 +883,59 @@ void main() {
       expect(temp.read('Miyabi', 'Body.dds'), 'v1');
     });
 
+    /// Ellen's and Miyabi's file, Miyabi's folder of it holding only [miyabiFile], an `.ini` without the textures it asks for.
+    DownloadJob placing(String miyabiFile) => landed(
+          zip('placing.zip', {'Ellen/Ellen.ini': ini, 'Ellen/Body.dds': 'v2', 'Miyabi/$miyabiFile': '$ini; fix\n'}),
+          mods: [baseOf('Ellen', 100, heldFileId: 1), baseOf('Miyabi', 100, heldFileId: 1)],
+          published: published,
+        );
+
+    /// [job] prepared again with [answers], as the unpack lane does once they are given.
+    Future<UpdateStageReady> answeredWith(DownloadJob job, Map<String, UpdateModAnswer> answers) async {
+      final asks = await prepareUpdateJob(container, job) as UpdateStageAsks;
+      addTearDown(() => deleteKept(asks.prepared));
+      expect(asks.wait.modId, 'Miyabi');
+      var kept = asks.prepared! as UpdateRunKept;
+      for (final MapEntry(key: modId, value: answer) in answers.entries) {
+        kept = kept.withAnswer(modId, answer);
+      }
+      final ready = await prepareUpdateJob(container, job.copyWith(prepared: kept));
+      expect(ready, isA<UpdateStageReady>());
+      return ready as UpdateStageReady;
+    }
+
+    test('a patch refused by a sibling of its job leaves that sibling, whose own file was written, as written', () async {
+      await group();
+      final job = placing('Miyabi.ini');
+      final ready = await answeredWith(job, {'Miyabi': const PlaceAsPatch('Ellen')});
+
+      final result = await writeUpdateJob(container, unpacked(job, ready));
+      expect(resultFor(result, 'Ellen').end, UpdateModEnd.written, reason: "Ellen's own update was written");
+      expect(resultFor(result, 'Miyabi').end, UpdateModEnd.failed, reason: 'nothing in Ellen matches the patch');
+      expect(temp.read('Ellen', 'Body.dds'), 'v2');
+      expect(temp.read('Miyabi', 'Body.dds'), 'v1');
+    });
+
+    test('a patch put into a sibling of its job the user skipped leaves that sibling skipped, with its verdict', () async {
+      await group();
+      container.read(modUpdateChecksProvider.notifier).state = {
+        'Ellen': const UpdateCheck(outcome: UpdateOutcome.updateAvailable, subject: DownloadKey.base(100)),
+        'Miyabi': const UpdateCheck(outcome: UpdateOutcome.updateAvailable, subject: DownloadKey.base(100)),
+      };
+      final job = placing('Ellen.ini');
+      final ready = await answeredWith(job, {'Ellen': const SkipThisMod(), 'Miyabi': const PlaceAsPatch('Ellen')});
+
+      final result = await writeUpdateJob(container, unpacked(job, ready));
+      expect(result, isA<UpdateStageSkipped>());
+      expect(resultFor(result, 'Ellen').skipReason, UpdateSkipReason.skippedByUser, reason: 'not "Updated": its file was not written');
+      expect(resultFor(result, 'Miyabi').skipReason, UpdateSkipReason.patchAddedElsewhere);
+      expect(resultFor(result, 'Miyabi').patchedInto, 'Ellen');
+      expect(temp.read('Ellen', 'Ellen.ini'), '$ini; fix\n', reason: 'the patch went on top of Ellen');
+      expect(temp.read('Ellen', 'Body.dds'), 'v1', reason: "Ellen's own update was not written");
+      expect(container.read(modUpdateChecksProvider).containsKey('Ellen'), isTrue,
+          reason: "Ellen's update is still to take, so her mark stays");
+    });
+
     test('a picked sibling whose folder holds a patch nothing records stops the job', () async {
       await group();
       await temp.writeOrigin('Miyabi', originFixture(
@@ -652,10 +947,21 @@ void main() {
         patches: [patchFixture(fileId: 9)],
       ));
 
-      final result = await prepareUpdateJob(container, job(['Ellen', 'Miyabi']));
+      final picks = job(['Ellen', 'Miyabi']);
+      final result = await prepareUpdateJob(container, picks);
       final asks = result as UpdateStageAsks;
       addTearDown(() => deleteKept(asks.prepared));
       expect(asks.wait.question, UpdateQuestionKind.unrecordedPatch);
+      expect(asks.wait.modId, 'Miyabi', reason: "only Miyabi's row asks it");
+      expect(temp.read('Miyabi', 'Body.dds'), 'v1');
+
+      // Skip on Miyabi's question leaves Miyabi as it was and writes Ellen.
+      final kept = (asks.prepared! as UpdateRunKept).withAnswer('Miyabi', const SkipThisMod());
+      final ready = await prepareUpdateJob(container, picks.copyWith(prepared: kept)) as UpdateStageReady;
+      final written = await writeUpdateJob(container, unpacked(picks, ready));
+      expect(resultFor(written, 'Ellen').end, UpdateModEnd.written);
+      expect(resultFor(written, 'Miyabi').skipReason, UpdateSkipReason.skippedByUser);
+      expect(temp.read('Ellen', 'Body.dds'), 'v2');
       expect(temp.read('Miyabi', 'Body.dds'), 'v1');
     });
 

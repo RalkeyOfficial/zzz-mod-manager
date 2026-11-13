@@ -203,7 +203,6 @@ void main() {
       final question = (asked as UpdateAsks).question as FoldersQuestion;
       expect(question.problem, UpdateLayoutProblem.layoutUnknown);
       expect(question.choices.map((c) => c.name), unorderedEquals(['Ellen', 'Ellen previews']));
-      expect({for (final c in question.choices) c.name: c.looksLikeMod}, {'Ellen': true, 'Ellen previews': false});
       expect(unpacks, hasLength(1));
 
       final ellen = question.choices.firstWhere((c) => c.name == 'Ellen').path;

@@ -47,9 +47,10 @@ DownloadJob updateJob(
   );
 }
 
-/// The base layer of the folder [modId], whose mod page is [remoteId], picked while its record named [heldFileId].
-UpdateMod baseOf(String modId, int remoteId, {int? heldFileId, String? name}) =>
-    UpdateMod(modId: modId, layer: DownloadKey.base(remoteId), heldFileId: heldFileId, name: name);
+/// The base layer of the folder [modId], whose mod page is [remoteId], picked while its record named [heldFileId],
+/// from a check whose Ignore would have dismissed up to [dismissUpTo].
+UpdateMod baseOf(String modId, int remoteId, {int? heldFileId, String? name, DateTime? dismissUpTo}) =>
+    UpdateMod(modId: modId, layer: DownloadKey.base(remoteId), heldFileId: heldFileId, name: name, dismissUpTo: dismissUpTo);
 
 /// A patch layer of the folder [modId], whose mod page is [remoteId], picked while its record named [heldFileId].
 UpdateMod patchOf(String modId, int remoteId, {int? heldFileId}) =>

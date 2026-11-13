@@ -683,10 +683,10 @@ class _NewerFileRow extends ConsumerWidget {
     final text = Theme.of(context).textTheme;
     final writing = ref.watch(modWritesInProgressProvider).contains(mod.id);
     final run = ref.watch(updateJobOfModProvider(mod.id));
-    // Update and Ignore give way to the run's status while the mod is in it, and come back beside an ended job's
-    // status while the mod still has a newer file: a skip or a failure writes nothing.
+    // Update and Ignore give way to the run's status while the mod is in it,
+    // and come back beside an ended job's status, or this mod's skip in a job still going, while the mod still has a newer file: a skip or a failure writes nothing.
     final hasUpdate = ref.watch(modUpdateChecksProvider.select((checks) => checks[mod.id]?.hasUpdate ?? false));
-    final offerUpdate = run == null || (run.job.isTerminal && hasUpdate);
+    final offerUpdate = run == null || ((run.job.isTerminal || run.result != null) && hasUpdate);
     final ignorable = check.subjectModId != null && check.dismissableUpTo != null;
     final author = modAuthor(mod, installedRecord(mod, ref.watch(knownModPagesProvider)).page);
     final character = libraryGroupName(libraryGroupOf(mod.characterId), loc);
@@ -898,10 +898,12 @@ class _RunStatus extends ConsumerWidget {
             loc,
             result?.skipReason ?? job.skipReason,
             stillOn: heldFileDate,
-            alongWith: switch (result?.alongWith) { final id? => _modName(ref, id), null => null },
+            result: result,
+            nameOf: (id) => _modName(ref, id),
           ),
           palette.text2,
         ),
+      null when result?.patchAdded ?? false => (loc.t('downloads.update.patch_added'), palette.accent),
       null => switch (job.outcome) {
           JobOutcome.patchAdded => (loc.t('downloads.update.patch_added'), palette.accent),
           JobOutcome.reinstalled => (loc.t('downloads.reinstalled_undated'), palette.accent),
@@ -912,12 +914,9 @@ class _RunStatus extends ConsumerWidget {
 
     switch (phase) {
       case UpdateAsking():
-        final answerable = updateQuestionAnswerable(job.updateWait?.question);
         link = ZenithLink(
-          loc.t(answerable ? 'library.updates.status.answer' : 'downloads.update.skip'),
-          onTap: answerable
-              ? () => unawaited(ref.read(downloadQuestionsProvider).answer(job.seq))
-              : () => unawaited(ref.read(downloadQueueProvider.notifier).skipUpdate(job.seq)),
+          loc.t('library.updates.status.answer'),
+          onTap: () => unawaited(ref.read(downloadQuestionsProvider).answer(job.seq)),
           style: text.bodySmall?.copyWith(fontWeight: FontWeight.w600, color: palette.accent),
         );
       case UpdateConnecting() || UpdateDownloading():

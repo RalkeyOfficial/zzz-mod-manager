@@ -82,7 +82,7 @@ Beside several mods, each mod with no shader files of its own gets a copy, becau
 A mod that already has a `ShaderFixes/`, or a shader folder under another name that becomes one, keeps it as it is, since merging a second set into it risks two files of one name.
 The copies are identical, so the mods can be on together, and the files leave ZZMI's folder with the last of them (§4).
 Only a set no mod can take, because every mod already has shader files of its own, becomes a mod named `<archive> ShaderFixes`.
-A shader-only folder counts as a mod: the import picker preselects it, and it raises no "no `.ini`" warning.
+A shader-only folder counts as a mod: the import's folders window says "Shader fixes only" for it and, as for every folder, ticks nothing, and it raises no "no `.ini`" warning.
 
 Import keeps each file's time from the archive, and copying into the library keeps it too, so a shipped `.bin` stays valid (§1).
 Zip entries written with `\` are split into folders, since a Windows filename cannot contain one.

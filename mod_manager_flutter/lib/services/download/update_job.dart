@@ -21,6 +21,7 @@ class UpdateMod {
     this.uid,
     this.heldFileId,
     this.heldDismissedUntil,
+    this.dismissUpTo,
   });
 
   /// The mod's folder id.
@@ -41,6 +42,10 @@ class UpdateMod {
 
   /// The dismissal the layer's record held when the job was made, so only an Ignore written or raised since is read as one.
   final DateTime? heldDismissedUntil;
+
+  /// What Ignore would have written for the check the press was made from (`UpdateCheck.dismissableUpTo`):
+  /// the dismissal a patch put on top of this mod records on its layer, so nothing the check listed is offered again.
+  final DateTime? dismissUpTo;
 
   bool sameLayerAs(UpdateMod other) => modId == other.modId && layer == other.layer;
 
@@ -122,12 +127,49 @@ enum UpdateQuestionKind {
 
 /// The question a waiting update job stopped at.
 class UpdateWait {
-  const UpdateWait(this.question, {this.passwordFailed = false});
+  const UpdateWait(this.question, {this.modId, this.passwordFailed = false, this.asking = 0});
 
   final UpdateQuestionKind question;
 
+  /// The folder id of the mod the question is about, so only that mod's row asks it and Skip leaves the job's other mods going.
+  /// Null for a question about the archive itself, the password.
+  final String? modId;
+
   /// The password given last did not open the archive.
   final bool passwordFailed;
+
+  /// Which time the queue stopped a job at a question, numbered by the queue,
+  /// so an answer given in a window opened for an earlier one is refused (`DownloadQueue.answerUpdate`).
+  final int asking;
+
+  UpdateWait asAsking(int asking) =>
+      UpdateWait(question, modId: modId, passwordFailed: passwordFailed, asking: asking);
+}
+
+/// What the user answered about one mod of an update job (`docs/update-runs.md` §6).
+/// Kept with the job's unpack, so the next preview of it, the write's included, does not ask again.
+sealed class UpdateModAnswer {
+  const UpdateModAnswer();
+}
+
+/// Update anyway, at the unrecorded-patch question: the write takes the patch with the old version, and the saved copy keeps it.
+final class UpdateAnyway extends UpdateModAnswer {
+  const UpdateAnyway();
+}
+
+/// An answer to the patch question: the file goes on top of the folder [intoModId] as a patch layer, by placement and never by the wipe.
+/// The mod's own folder for "Put it on top", another mod's for "Add it to a different mod you have".
+final class PlaceAsPatch extends UpdateModAnswer {
+  const PlaceAsPatch(this.intoModId);
+
+  final String intoModId;
+}
+
+/// Skip, at a question about this mod while the job's other mods go on. [reason] is why, the user's own Skip unless the answer found the mod gone.
+final class SkipThisMod extends UpdateModAnswer {
+  const SkipThisMod([this.reason = UpdateSkipReason.skippedByUser]);
+
+  final UpdateSkipReason reason;
 }
 
 /// Why an update job failed after its bytes landed. A transfer failure is the download's own exception instead.
@@ -217,6 +259,10 @@ enum UpdateSkipReason {
   /// The layer was written by something else while the job waited, and its update mark is gone.
   /// [UpdateModResult.alongWith] names the mod of the run's job that wrote it, when one did.
   alreadyUpdated,
+
+  /// The file looked like a patch and the user put it into another mod; [UpdateModResult.patchedInto] names it.
+  /// This mod keeps its update mark.
+  patchAddedElsewhere,
 }
 
 /// How one mod of an ended update job came out.
@@ -224,15 +270,15 @@ enum UpdateModEnd { written, skipped, refused, failed }
 
 /// What an ended update job came to for one of its mods.
 class UpdateModResult {
-  const UpdateModResult(this.mod, this.end, {this.skipReason, this.failure, this.alongWith});
+  const UpdateModResult(this.mod, this.end, {this.skipReason, this.failure, this.alongWith, this.patchedInto});
 
-  const UpdateModResult.written(this.mod)
+  const UpdateModResult.written(this.mod, {this.patchedInto})
       : end = UpdateModEnd.written,
         skipReason = null,
         failure = null,
         alongWith = null;
 
-  const UpdateModResult.skipped(this.mod, UpdateSkipReason this.skipReason, {this.alongWith})
+  const UpdateModResult.skipped(this.mod, UpdateSkipReason this.skipReason, {this.alongWith, this.patchedInto})
       : end = UpdateModEnd.skipped,
         failure = null;
 
@@ -247,6 +293,13 @@ class UpdateModResult {
 
   /// For [UpdateSkipReason.alreadyUpdated]: the folder id of the mod whose job wrote this one, or null.
   final String? alongWith;
+
+  /// The folder id the file was placed into as a patch layer: the mod's own for "Patch added",
+  /// another mod's for [UpdateSkipReason.patchAddedElsewhere]. Null for a write by the wipe.
+  final String? patchedInto;
+
+  /// The file went on top of this mod's own folder as a patch.
+  bool get patchAdded => end == UpdateModEnd.written && patchedInto == mod.modId;
 }
 
 /// A run stopped by a failure every later job would share.

@@ -7,10 +7,7 @@ import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/components/library_actions_host.dart';
 import 'package:mod_manager_flutter/screens/dialogs/update_modal.dart';
-import 'package:mod_manager_flutter/services/download/download_job.dart';
 import 'package:mod_manager_flutter/services/download/download_queue.dart';
-import 'package:mod_manager_flutter/services/download/download_request.dart';
-import 'package:mod_manager_flutter/services/download/update_job.dart';
 import 'package:mod_manager_flutter/services/update_check.dart';
 import 'package:mod_manager_flutter/utils/notifications.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
@@ -19,7 +16,7 @@ import 'support/all_mods_harness.dart';
 import 'support/library_override.dart';
 import 'support/localized_harness.dart';
 import 'support/origin_shorthand.dart';
-import 'support/seeded_queue.dart';
+import 'support/recording_queue.dart';
 
 /// The press of "Update N" (`docs/update-runs.md` §3, §9): the picks go into the download queue as a run and the list
 /// closes, with no window per mod, and the button is never held off by the run.
@@ -51,7 +48,7 @@ void main() {
   final mods = [mod('A', 100, uid: 'uid-a', dismissed: ignoredUntil), mod('B', 200, uid: 'uid-b')];
 
   testWidgets('the press puts every pick in the queue and closes the list, with no window per mod', (tester) async {
-    final queue = _RecordingQueue();
+    final queue = RecordingQueue();
     final container = await pumpAllModsTable(
       tester,
       mods,
@@ -83,7 +80,7 @@ void main() {
   });
 
   testWidgets('a mod gone from the library between the list and the press is left out', (tester) async {
-    final queue = _RecordingQueue();
+    final queue = RecordingQueue();
     final container = ProviderContainer(
       overrides: [libraryOf([mods.first]), downloadQueueProvider.overrideWith(() => queue)],
     );
@@ -113,7 +110,7 @@ void main() {
 
   testWidgets('a pick that adds nothing says so, rather than closing as if it worked', (tester) async {
     // Adds A and not B, as the queue does when B's file is already in another download.
-    final queue = _RecordingQueue(adds: {'A'});
+    final queue = RecordingQueue(adds: {'A'});
     final container = ProviderContainer(
       overrides: [libraryOf(mods), downloadQueueProvider.overrideWith(() => queue)],
     );
@@ -143,31 +140,4 @@ void main() {
     expect(note.title, '1 update not added: its file is already in another download');
     expect(note.body, 'B Outfit');
   });
-}
-
-/// A queue that keeps what each press asked for and starts nothing, so no transfer leaves the test.
-/// It answers a job for the picks of the mods in [adds] and nothing for the rest.
-class _RecordingQueue extends SeededQueue {
-  _RecordingQueue({this.adds = const {}}) : super(const []);
-
-  final Set<String> adds;
-  final List<List<UpdateEnqueue>> pressed = [];
-
-  @override
-  List<DownloadJob?> enqueueUpdates(List<UpdateEnqueue> presses) {
-    pressed.add(presses);
-    return [
-      for (final (i, press) in presses.indexed)
-        adds.contains(press.task.primary.modId)
-            ? DownloadJob(
-                seq: i + 1,
-                request: DownloadRequest(url: Uri.parse('https://gamebanana.com/dl/${press.file.idRow}')),
-                intent: DownloadIntent.update,
-                subject: press.subject,
-                file: press.file,
-                update: press.task,
-              )
-            : null,
-    ];
-  }
 }

@@ -25,7 +25,13 @@ import '../components/zenith_dialog.dart';
 
 /// One file picked for one mod in [UpdateModal]: what `LibraryActions.updateMods` writes.
 class UpdatePick {
-  const UpdatePick({required this.modId, required this.file, required this.subject, required this.published});
+  const UpdatePick({
+    required this.modId,
+    required this.file,
+    required this.subject,
+    required this.published,
+    this.dismissUpTo,
+  });
 
   /// The mod's folder id. The mod itself is read again when its turn comes, since a rescan replaces every `ModInfo`.
   final String modId;
@@ -36,6 +42,9 @@ class UpdatePick {
 
   /// Every file the check found newer, so a pick below the newest records the rest as passed over.
   final List<GbFile> published;
+
+  /// What Ignore writes for the check the pick was made from (`UpdateCheck.dismissableUpTo`).
+  final DateTime? dismissUpTo;
 }
 
 /// The update job [pick] asks for, of [mod] as the library holds it now: what a press of Update N puts in the queue.
@@ -56,6 +65,7 @@ UpdateEnqueue updateEnqueueOf(UpdatePick pick, ModInfo mod) {
           uid: mod.uid,
           heldFileId: record?.fileId,
           heldDismissedUntil: record?.updatesDismissedUntil,
+          dismissUpTo: pick.dismissUpTo,
         ),
       ],
       published: pick.published,
@@ -186,6 +196,7 @@ class _UpdateModalState extends ConsumerState<UpdateModal> {
             file: entry.check.newerFiles.firstWhere((file) => file.idRow == fileId),
             subject: subject,
             published: entry.check.newerFiles,
+            dismissUpTo: entry.check.dismissableUpTo,
           ),
   ];
 

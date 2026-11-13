@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
-import '../../l10n/app_localizations.dart';
+
 import '../../models/character_info.dart';
-import '../../services/archive_service.dart';
-import '../../services/shader_fixes/shader_fixes_service.dart';
-import '../../services/update_apply/update_layout.dart';
+import '../../services/archive_folder_summary.dart';
+import 'folders_modal.dart';
 
 /// One extracted/dropped top-level folder offered for import.
 class ImportFolderChoice {
@@ -14,10 +13,6 @@ class ImportFolderChoice {
   /// Display name and (for separate installs) the resulting mod name.
   final String name;
 
-  /// Whether the folder contains a `.ini` (recursively) — i.e. looks like a
-  /// real mod rather than auxiliary content (previews/images).
-  final bool looksLikeMod;
-
   /// The folder of another name that import moved this folder's shader files
   /// out of, into its `ShaderFixes/`; null when it did not.
   final String? shaderSource;
@@ -25,27 +20,7 @@ class ImportFolderChoice {
   const ImportFolderChoice({
     required this.path,
     required this.name,
-    required this.looksLikeMod,
     this.shaderSource,
-  });
-}
-
-/// The user's choice from [showImportSelectionDialog].
-class ImportSelection {
-  /// When true, [folders] are installed as subfolders of one mod ([combinedName]);
-  /// otherwise each folder is installed as its own mod.
-  final bool combine;
-
-  /// Selected folder paths (a subset of the offered choices).
-  final List<String> folders;
-
-  /// Name of the combined mod (only meaningful when [combine] is true).
-  final String combinedName;
-
-  const ImportSelection({
-    required this.combine,
-    required this.folders,
-    required this.combinedName,
   });
 }
 
@@ -68,287 +43,127 @@ class ImportPlan {
   });
 }
 
-/// The single entry point both the mods-screen import (drag/drop + button) and
-/// the marketplace auto-install use to decide how a set of extracted/dropped
-/// folders becomes mods. For one folder it installs as-is with no prompt; for
-/// several it opens [showImportSelectionDialog] so the user picks which to
-/// install and whether to combine. Returns null if the user cancelled — the
-/// caller is responsible for cleaning up any extracted temp dirs.
+/// What an install's folders question came to: a plan, or Don't install.
+class ImportAnswer {
+  const ImportAnswer(ImportPlan this.plan);
+
+  const ImportAnswer.declined() : plan = null;
+
+  /// Null for Don't install.
+  final ImportPlan? plan;
+
+  bool get declined => plan == null;
+}
+
+/// The single entry point both the mods-screen import (drag/drop + button) and the marketplace auto-install use to decide how a set of extracted/dropped folders becomes mods.
+/// For one folder it installs as-is with no prompt; for several it opens the folders window in its install context, where the user ticks which to install and whether they are one mod or each its own.
+/// Returns null when the window was closed without an answer, and a declined answer for Don't install;
+/// the caller is responsible for cleaning up any extracted temp dirs.
 ///
-/// [shaderSources] is the extraction's [ArchiveExtractionResult.shaderSources],
-/// shown under each folder it names.
+/// [shaderSources] is the extraction's `ArchiveExtractionResult.shaderSources`, shown under each folder it names.
+/// [archiveName] and [characterId] are for the window's header.
 ///
 /// Keeping this in one place is deliberate: the multi-folder branch was once
 /// added to the mods screen but forgotten in the marketplace, so both paths now
 /// share this resolver rather than each hand-rolling the choice building.
-Future<ImportPlan?> resolveImportSelection(
+Future<ImportAnswer?> resolveImportSelection(
   BuildContext context,
   List<String> folderPaths, {
   required String defaultCombinedName,
   Map<String, String> shaderSources = const {},
+  String? archiveName,
+  String? characterId,
 }) async {
   if (folderPaths.length <= 1) {
     // Return a copy, never the caller's own list: both call sites do
     // `folderPaths..clear()..addAll(plan.folders)`, so aliasing the argument
     // would clear the list and then add nothing back, silently dropping the
     // single folder and reporting a false "already exists / error".
-    return ImportPlan(
+    return ImportAnswer(ImportPlan(
       folders: List<String>.from(folderPaths),
       combine: false,
       combinedName: '',
-    );
+    ));
   }
 
-  final choices = <ImportFolderChoice>[];
-  for (final folder in folderPaths) {
-    choices.add(
-      ImportFolderChoice(
-        path: folder,
-        name: path.basename(folder),
-        looksLikeMod: await ArchiveService.containsIniFile(folder) ||
-            await ShaderFixesService.shaderPartOf(folder) != null,
-        shaderSource: shaderSources[folder],
-      ),
-    );
-  }
+  final choices = folderChoicesOf(folderPaths, shaderSources: shaderSources);
+  final summaries = await summariseFolders(folderPaths);
 
   if (!context.mounted) return null;
-  final selection = await showImportSelectionDialog(
+  final pick = await showFoldersModal(
     context,
-    choices,
-    defaultCombinedName: defaultCombinedName,
+    question: FoldersInstall(
+      archiveName: archiveName,
+      defaultCombinedName: defaultCombinedName,
+      characterId: characterId,
+    ),
+    choices: choices,
+    summaries: {for (final summary in summaries) summary.path: summary},
   );
-  if (selection == null || selection.folders.isEmpty) return null;
+  if (pick == null) return null;
+  if (pick.declined) return const ImportAnswer.declined();
+  if (pick.folders.isEmpty) return null;
 
-  return ImportPlan(
-    folders: selection.folders,
-    combine: selection.combine,
-    combinedName: selection.combinedName,
-  );
+  return ImportAnswer(ImportPlan(
+    folders: pick.folders,
+    combine: pick.combine,
+    combinedName: pick.combinedName,
+  ));
 }
 
-/// Asks which of an update archive's folders are [mod], for an update whose layout the app has no usable record of.
+/// [folderPaths] as the folders window offers them, in the order given.
+List<ImportFolderChoice> folderChoicesOf(
+  List<String> folderPaths, {
+  Map<String, String> shaderSources = const {},
+}) =>
+    [
+      for (final folder in folderPaths)
+        ImportFolderChoice(path: folder, name: path.basename(folder), shaderSource: shaderSources[folder]),
+    ];
+
+/// What the folders question of an update came to: the folders ticked, Skip this update ([skipped]), or nothing for a window closed without an answer.
+class UpdateFolderPick {
+  const UpdateFolderPick(List<String> this.folders);
+
+  const UpdateFolderPick.skipped() : folders = null;
+
+  final List<String>? folders;
+
+  bool get skipped => folders == null;
+}
+
+/// Asks which of an update archive's folders are [mod], for an update whose layout the app has no usable record of (the folders window in its update context).
 ///
-/// The import's picker without the separate-or-combined choice: an update always lands in the one folder it is for.
-/// Pre-ticked are the folders named like the mod's own folder or its recorded folders, since an archive holding several mods
-/// holds a `.ini` in each of them; only when nothing matches does the `.ini` rule decide.
-/// Returns the chosen folder paths, or null when cancelled.
-Future<List<String>?> pickUpdateFolders(
+/// An update always lands in the one folder it is for, so there is no separate-or-combined choice and nothing to name.
+/// Nothing is ticked: a folder named like the mod's own, or like one its record names, or like the file, says so as a hint, and a guess never ticks.
+/// [modsPath] is the library folder, for what the mod holds now; [archiveName] is the update's file name, and [heldFileDate] the upload date of the file the mod holds.
+/// Null when the window was closed without an answer.
+Future<UpdateFolderPick?> pickUpdateFolders(
   BuildContext context, {
   required ModInfo mod,
   required List<ImportFolderChoice> choices,
-  required UpdateLayoutProblem problem,
+  String? modsPath,
+  String? archiveName,
+  DateTime? heldFileDate,
   bool reinstall = false,
 }) async {
-  final known = {
-    mod.id.toLowerCase(),
-    for (final folder in mod.origin?.ingest?.folders ?? const <String>[])
-      folder.toLowerCase(),
-  };
-  final named = {
-    for (final choice in choices)
-      if (known.contains(choice.name.toLowerCase())) choice.path,
-  };
-
-  final loc = context.loc;
-  final selection = await showImportSelectionDialog(
+  final current = modsPath == null ? null : path.join(modsPath, mod.id);
+  final summaries = await summariseFolders([?current, for (final choice in choices) choice.path]);
+  if (!context.mounted) return null;
+  final pick = await showFoldersModal(
     context,
-    choices,
-    defaultCombinedName: mod.name,
-    singleMod: true,
-    preselected: named.isEmpty ? null : named,
-    title: loc.t('mods.update_apply.pick_title', params: {'mod': mod.name}),
-    intro: loc.t(problem == UpdateLayoutProblem.layoutChanged
-        ? 'mods.update_apply.pick_intro_changed'
-        : 'mods.update_apply.pick_intro_unknown'),
-    confirmLabel: loc.t(
-      reinstall ? 'mods.reinstall.confirm' : 'mods.update_apply.pick_confirm',
+    question: FoldersUpdate(
+      archiveName: archiveName,
+      mod: mod,
+      current: current == null ? null : summaries.first,
+      heldFileDate: heldFileDate,
+      reinstall: reinstall,
     ),
+    choices: choices,
+    summaries: {for (final summary in summaries.skip(current == null ? 0 : 1)) summary.path: summary},
   );
-  if (selection == null || selection.folders.isEmpty) return null;
-  return selection.folders;
-}
-
-/// Lets the user pick which of several extracted/dropped folders to install and
-/// whether they become separate mods or one combined mod. Folders containing a
-/// `.ini` are pre-checked; folders without one (likely previews/images) are
-/// shown unchecked and labelled. Returns the selection, or null if cancelled.
-///
-/// With [singleMod] the separate-or-combined choice and the name field are left out,
-/// and [title], [intro] and [confirmLabel] say what the one mod is.
-/// [preselected] replaces the `.ini` pre-check with the caller's own set of paths.
-Future<ImportSelection?> showImportSelectionDialog(
-  BuildContext context,
-  List<ImportFolderChoice> choices, {
-  required String defaultCombinedName,
-  bool singleMod = false,
-  Set<String>? preselected,
-  String? title,
-  String? intro,
-  String? confirmLabel,
-}) {
-  final loc = context.loc;
-
-  // Pre-check the folders that look like mods; if none do, pre-check them all so
-  // the user isn't faced with an empty selection.
-  final modLike = choices.where((c) => c.looksLikeMod).map((c) => c.path);
-  final selected = <String>{
-    ...(preselected ?? (modLike.isEmpty ? choices.map((c) => c.path) : modLike)),
-  };
-  final nameController = TextEditingController(text: defaultCombinedName);
-  var combine = false;
-
-  return showDialog<ImportSelection>(
-    context: context,
-    builder: (dialogContext) {
-      return StatefulBuilder(
-        builder: (dialogContext, setLocal) {
-          final canConfirm = selected.isNotEmpty &&
-              (!combine || nameController.text.trim().isNotEmpty);
-
-          void confirm() {
-            Navigator.pop(
-              dialogContext,
-              ImportSelection(
-                combine: combine,
-                folders: choices
-                    .where((c) => selected.contains(c.path))
-                    .map((c) => c.path)
-                    .toList(),
-                combinedName: nameController.text.trim(),
-              ),
-            );
-          }
-
-          return AlertDialog(
-            title: Row(
-              children: [
-                const Icon(Icons.folder_open, size: 24),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    title ?? loc.t('mods.dialog.import_select_title'),
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ),
-              ],
-            ),
-            content: SizedBox(
-              width: 440,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(intro ?? loc.t('mods.dialog.import_select_message')),
-                  const SizedBox(height: 8),
-                  if (!singleMod) ...[
-                    RadioListTile<bool>(
-                      value: false,
-                      groupValue: combine,
-                      onChanged: (v) => setLocal(() => combine = false),
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(loc.t('mods.dialog.import_select_separate')),
-                    ),
-                    RadioListTile<bool>(
-                      value: true,
-                      groupValue: combine,
-                      onChanged: (v) => setLocal(() => combine = true),
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(loc.t('mods.dialog.import_select_combine')),
-                    ),
-                  ],
-                  if (combine) ...[
-                    const SizedBox(height: 4),
-                    TextField(
-                      controller: nameController,
-                      onChanged: (_) => setLocal(() {}),
-                      decoration: InputDecoration(
-                        labelText: loc.t('mods.dialog.import_select_name'),
-                        isDense: true,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
-                  ],
-                  const Divider(height: 20),
-                  Flexible(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 260),
-                      child: ListView(
-                        shrinkWrap: true,
-                        children: [
-                          for (final choice in choices)
-                            CheckboxListTile(
-                              value: selected.contains(choice.path),
-                              onChanged: (v) => setLocal(() {
-                                if (v == true) {
-                                  selected.add(choice.path);
-                                } else {
-                                  selected.remove(choice.path);
-                                }
-                              }),
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(choice.name),
-                              subtitle: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    choice.looksLikeMod
-                                        ? loc.t('mods.dialog.import_select_mod')
-                                        : loc.t('mods.dialog.import_select_aux'),
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall
-                                        ?.copyWith(
-                                      color: choice.looksLikeMod
-                                          ? Colors.green
-                                          : Colors.grey,
-                                    ),
-                                  ),
-                                  if (choice.shaderSource case final source?)
-                                    Text(
-                                      loc.t(
-                                        'mods.dialog.import_select_shader_source',
-                                        params: {'folder': source},
-                                      ),
-                                      style: Theme.of(context).textTheme.bodySmall,
-                                    ),
-                                ],
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, null),
-                child: Text(loc.t('mods.dialog.cancel')),
-              ),
-              FilledButton(
-                onPressed: canConfirm ? confirm : null,
-                child: Text(
-                  confirmLabel ??
-                      (combine
-                          ? loc.t('mods.dialog.import_select_confirm_one')
-                          : loc.t(
-                              'mods.dialog.import_select_confirm',
-                              params: {'count': selected.length.toString()},
-                            )),
-                ),
-              ),
-            ],
-          );
-        },
-      );
-    },
-  );
+  if (pick == null) return null;
+  if (pick.declined) return const UpdateFolderPick.skipped();
+  if (pick.folders.isEmpty) return null;
+  return UpdateFolderPick(pick.folders);
 }

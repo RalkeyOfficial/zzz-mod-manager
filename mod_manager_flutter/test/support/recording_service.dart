@@ -41,6 +41,9 @@ class RecordingService extends ModManagerService {
   /// While set, the first read of `modManagerServiceProvider` in a container waits for it.
   Completer<void>? holdLookup;
 
+  /// While set, the next read of a mod's origin waits for it, and the reads after that one do not.
+  Completer<void>? holdNextOriginRead;
+
   /// Puts this in `ApiService` in place of the library's own service.
   void install() => ApiService.useLibraryForTests(temp.config, service: this);
 
@@ -62,6 +65,14 @@ class RecordingService extends ModManagerService {
   Future<bool> activateMod(String modName) async {
     await holdActivation?.future;
     return super.activateMod(modName);
+  }
+
+  @override
+  Future<ModOrigin?> readModOrigin(String modName) async {
+    final hold = holdNextOriginRead;
+    holdNextOriginRead = null;
+    await hold?.future;
+    return super.readModOrigin(modName);
   }
 
   @override

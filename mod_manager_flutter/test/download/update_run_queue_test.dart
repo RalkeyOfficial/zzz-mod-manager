@@ -547,9 +547,9 @@ void main() {
     test('an answered question goes back to the unpack lane ahead of the jobs that have not waited', () {
       final seeded = seed([
         updateJob(1, state: DownloadJobState.downloaded),
-        updateJob(2, state: DownloadJobState.waiting),
+        updateJob(2, state: DownloadJobState.waiting).withUpdateWait(const UpdateWait(UpdateQuestionKind.password)),
       ]);
-      seeded.answerUpdate(2, prepared: 'the answer', password: 'secret');
+      seeded.answerUpdate(2, asking: 0, prepared: 'the answer', password: 'secret');
       expect(jobOf(2).state, DownloadJobState.downloaded);
       expect(jobOf(2).hasWaited, isTrue);
       expect(jobOf(2).password, 'secret');
@@ -581,6 +581,107 @@ void main() {
       expect(container.read(updateJobOfModProvider('mod1')), before, reason: 'equal, so its row is not rebuilt');
       seeded.settleUpdate(1, const UpdateStageAsks(UpdateWait(UpdateQuestionKind.unrecordedPatch)));
       expect(container.read(updateJobOfModProvider('mod1')), isNot(before));
+    });
+
+    test('an answer or a Skip given to another question than the one the job waits on changes nothing', () async {
+      final seeded = seed([
+        updateJob(1, state: DownloadJobState.waiting).withUpdateWait(const UpdateWait(UpdateQuestionKind.password, asking: 2)),
+      ]);
+      expect(seeded.answerUpdate(1, asking: 1, password: 'secret'), isFalse);
+      await seeded.skipUpdate(1, asking: 1);
+      expect(jobOf(1).state, DownloadJobState.waiting);
+      expect(jobOf(1).updateWait?.asking, 2);
+      expect(jobOf(1).password, isNull);
+      expect(jobOf(1).modResults, isEmpty);
+
+      expect(seeded.answerUpdate(1, asking: 2, password: 'secret'), isTrue, reason: 'the question it does wait on');
+      expect(jobOf(1).state, DownloadJobState.downloaded);
+    });
+
+    test('a mod skipped at its question while its job went on keeps that skip however the job ends', () async {
+      for (final end in [
+        const UpdateStageFailed(UpdateFailure(UpdateFailureKind.unpackGone)) as UpdateStageResult,
+        const UpdateStageSkipped(UpdateSkipReason.modGone),
+        UpdateStageSkipped(
+          UpdateSkipReason.beingWritten,
+          results: [for (final id in ['P', 'S']) UpdateModResult.skipped(baseOf(id, 1), UpdateSkipReason.beingWritten)],
+        ),
+      ]) {
+        final mods = [baseOf('P', 1), baseOf('S', 1)];
+        final seeded = seed([
+          updateJob(1, state: DownloadJobState.waiting, mods: mods)
+              .withUpdateWait(const UpdateWait(UpdateQuestionKind.patchShaped, modId: 'S')),
+        ]);
+        expect(
+          seeded.answerUpdate(1, asking: 0, skipping: UpdateModResult.skipped(mods[1], UpdateSkipReason.skippedByUser)),
+          isTrue,
+        );
+        expect(seeded.claimNextUpdateUnpack()?.seq, 1);
+        seeded.settleUpdate(1, end);
+
+        final job = jobOf(1);
+        final s = job.resultFor('S')!;
+        expect((s.end, s.skipReason), (UpdateModEnd.skipped, UpdateSkipReason.skippedByUser), reason: '$end');
+        final p = job.resultFor('P')!;
+        expect(
+          (p.end, p.skipReason),
+          switch (end) {
+            UpdateStageFailed() => (UpdateModEnd.failed, null),
+            UpdateStageSkipped(:final reason) => (UpdateModEnd.skipped, reason),
+            _ => fail('$end'),
+          },
+          reason: 'the other mod ends as the stage said',
+        );
+      }
+    });
+
+    /// Job 1 for P and S, waiting on a question about [about], skipped there by the user, and claimed by the unpack lane again.
+    DownloadQueue skippedAt(String about) {
+      final mods = [baseOf('P', 1), baseOf('S', 1)];
+      final seeded = seed([
+        updateJob(1, state: DownloadJobState.waiting, mods: mods)
+            .withUpdateWait(UpdateWait(UpdateQuestionKind.patchShaped, modId: about)),
+      ]);
+      final skipped = mods.firstWhere((m) => m.modId == about);
+      expect(seeded.answerUpdate(1, asking: 0, skipping: UpdateModResult.skipped(skipped, UpdateSkipReason.skippedByUser)), isTrue);
+      expect(seeded.claimNextUpdateUnpack()?.seq, 1);
+      return seeded;
+    }
+
+    test("a job its stage skips as a whole takes its first mod's reason, here the user's Skip of it", () {
+      skippedAt('P').settleUpdate(1, const UpdateStageSkipped(UpdateSkipReason.beingWritten));
+      expect(jobOf(1).skipReason, UpdateSkipReason.skippedByUser);
+      expect(jobOf(1).resultFor('S')?.skipReason, UpdateSkipReason.sharedFileNotWritten);
+    });
+
+    test("a job its stage skips as a whole takes the stage's reason when its first mod has none", () {
+      final seeded = seed([updateJob(1, state: DownloadJobState.updating, step: UpdateStep.unpacking)]);
+      seeded.settleUpdate(
+        1,
+        UpdateStageSkipped(
+          UpdateSkipReason.beingWritten,
+          results: [UpdateModResult(baseOf('mod1', 1), UpdateModEnd.refused, failure: const UpdateFailure(UpdateFailureKind.refused))],
+        ),
+      );
+      expect(jobOf(1).resultFor('mod1')?.skipReason, isNull);
+      expect(jobOf(1).skipReason, UpdateSkipReason.beingWritten);
+    });
+
+    test("the user's Skip of a mod wins over what the stage finds about it later: already updated, or ignored meanwhile", () {
+      for (final end in [
+        UpdateStageWritten(JobOutcome.updated, results: [
+          UpdateModResult.written(baseOf('P', 1)),
+          UpdateModResult.skipped(baseOf('S', 1), UpdateSkipReason.alreadyUpdated),
+        ]) as UpdateStageResult,
+        UpdateStageSkipped(UpdateSkipReason.ignoredMeanwhile, results: [
+          UpdateModResult.skipped(baseOf('P', 1), UpdateSkipReason.ignoredMeanwhile),
+          UpdateModResult.skipped(baseOf('S', 1), UpdateSkipReason.ignoredMeanwhile),
+        ]),
+      ]) {
+        skippedAt('S').settleUpdate(1, end);
+        final s = jobOf(1).resultFor('S')!;
+        expect((s.end, s.skipReason), (UpdateModEnd.skipped, UpdateSkipReason.skippedByUser), reason: '$end');
+      }
     });
 
     test('Skip with a reason of its own leaves the row skipped for it', () async {

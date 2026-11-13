@@ -453,9 +453,10 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
           if (_isGroup && flattening.isNotEmpty)
             DialogNotice(
               icon: Icons.call_split,
-              message: loc.t(
+              message: loc.plural(
                 'mods.update_apply.group_flattens',
-                params: {'mods': flattening.join(', ')},
+                flattening.length,
+                params: {'count': '${flattening.length}', 'mods': flattening.join(', ')},
               ),
             ),
           // **Only where nothing else in the archive is a mod of the user's.**

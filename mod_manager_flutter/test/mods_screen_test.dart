@@ -16,6 +16,7 @@ import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/components/character_hero.dart';
 import 'package:mod_manager_flutter/screens/components/character_list.dart';
 import 'package:mod_manager_flutter/screens/components/character_pick.dart';
+import 'package:mod_manager_flutter/screens/components/question_parts.dart';
 import 'package:mod_manager_flutter/screens/components/mod_card_widget.dart';
 import 'package:mod_manager_flutter/screens/components/mod_details_panel.dart';
 import 'package:mod_manager_flutter/screens/components/mods_toolbar.dart';
@@ -250,12 +251,10 @@ void main() {
 
       await pressPaste(tester, settle: false);
       await confirmReview(tester);
-      await pumpUntil(find.text('Install it into an existing mod'));
-      await tester.tap(find.text('Install it into an existing mod'));
+      await pumpUntil(find.text('Add it to a mod you already have'));
+      await tester.tap(find.widgetWithText(PickRow, 'Ellen Maid'));
       await tester.pumpAndSettle();
-      await tester.tap(find.descendant(of: find.byType(Dialog), matching: find.text('Ellen Maid')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.descendant(of: find.byType(Dialog), matching: find.text('Install')));
+      await tester.tap(find.widgetWithText(FilledButton, 'Patch Ellen Maid'));
       await tester.pump();
       final applied = find.descendant(of: find.byType(NotificationOverlay), matching: find.text('Patch applied'));
       await pumpUntil(applied);
@@ -331,12 +330,10 @@ void main() {
 
       await pressPaste(tester, settle: false);
       await confirmReview(tester);
-      await pumpUntil(find.text('Install it into an existing mod'));
-      await tester.tap(find.text('Install it into an existing mod'));
+      await pumpUntil(find.text('Add it to a mod you already have'));
+      await tester.tap(find.widgetWithText(PickRow, 'Ellen Maid'));
       await tester.pumpAndSettle();
-      await tester.tap(find.descendant(of: find.byType(Dialog), matching: find.text('Ellen Maid')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.descendant(of: find.byType(Dialog), matching: find.text('Install')));
+      await tester.tap(find.widgetWithText(FilledButton, 'Patch Ellen Maid'));
       await tester.pump();
       await pumpUntil(find.descendant(of: find.byType(NotificationOverlay), matching: find.text('Patch applied')));
 

@@ -9,6 +9,7 @@ import '../../models/gamebanana/gamebanana.dart';
 import '../../services/gamebanana/file_selection.dart';
 import '../../services/update_check.dart';
 import '../../utils/byte_format.dart';
+import 'question_parts.dart' show ChoiceRadio;
 import 'resolve/resolve_fragments.dart' show formatResolveDate;
 import 'zenith_controls.dart' show ZenithBadge;
 
@@ -125,7 +126,7 @@ class FileRadioRow extends StatelessWidget {
                 return Row(
                   spacing: 12,
                   children: [
-                    _Radio(selected: selected, enabled: onTap != null),
+                    ChoiceRadio(selected: selected, enabled: onTap != null),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -168,33 +169,6 @@ class FileRadioRow extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _Radio extends StatelessWidget {
-  const _Radio({required this.selected, required this.enabled});
-
-  final bool selected;
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = ZenithPalette.of(context);
-    final ring = selected ? palette.accent : palette.check;
-    return Opacity(
-      opacity: enabled ? 1 : 0.5,
-      child: Container(
-        width: 18,
-        height: 18,
-        decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: ring, width: 1.5)),
-        child: selected
-            ? Padding(
-                padding: const EdgeInsets.all(1.5),
-                child: DecoratedBox(decoration: BoxDecoration(shape: BoxShape.circle, color: palette.accent)),
-              )
-            : null,
       ),
     );
   }

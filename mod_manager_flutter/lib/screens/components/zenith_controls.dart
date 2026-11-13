@@ -427,28 +427,40 @@ class OutlinedInitials extends StatelessWidget {
   );
 }
 
-/// A rounded box with a dashed border, the design's drop zone.
+/// A rounded box with a dashed border, the design's drop zone, and with short dashes a hint on a row.
 class DashedBox extends StatelessWidget {
-  const DashedBox({super.key, required this.color, required this.child, this.radius = 12, this.width = 1.5});
+  const DashedBox({
+    super.key,
+    required this.color,
+    required this.child,
+    this.radius = 12,
+    this.width = 1.5,
+    this.dash = 6,
+    this.gap = 4,
+  });
 
   final Color color;
   final double radius;
   final double width;
+  final double dash;
+  final double gap;
   final Widget child;
 
   @override
   Widget build(BuildContext context) => CustomPaint(
-    painter: _DashedBorderPainter(color, radius, width),
+    painter: _DashedBorderPainter(color, radius, width, dash, gap),
     child: child,
   );
 }
 
 class _DashedBorderPainter extends CustomPainter {
-  _DashedBorderPainter(this.color, this.radius, this.width);
+  _DashedBorderPainter(this.color, this.radius, this.width, this.dash, this.gap);
 
   final Color color;
   final double radius;
   final double width;
+  final double dash;
+  final double gap;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -458,8 +470,6 @@ class _DashedBorderPainter extends CustomPainter {
       ..color = color
       ..strokeWidth = width
       ..style = PaintingStyle.stroke;
-    const dash = 6.0;
-    const gap = 4.0;
     for (final metric in path.computeMetrics()) {
       for (var d = 0.0; d < metric.length; d += dash + gap) {
         canvas.drawPath(metric.extractPath(d, d + dash), paint);
@@ -468,5 +478,6 @@ class _DashedBorderPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_DashedBorderPainter old) => old.color != color || old.radius != radius || old.width != width;
+  bool shouldRepaint(_DashedBorderPainter old) =>
+      old.color != color || old.radius != radius || old.width != width || old.dash != dash || old.gap != gap;
 }

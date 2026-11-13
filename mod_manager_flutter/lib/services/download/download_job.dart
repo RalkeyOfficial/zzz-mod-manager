@@ -351,6 +351,7 @@ class DownloadJob {
   final Object? report;
 
   /// What an ended update job came to for each of its mods, in the order of [UpdateTask.mods].
+  /// Before it ends, the mods skipped at their questions while the job goes on.
   final List<UpdateModResult> modResults;
 
   /// The mod an update job is writing and the part of its write that has started, while [UpdateStep.writing].
@@ -369,6 +370,9 @@ class DownloadJob {
   /// An install keeps its answers in [prepared] only once it has waited; an update job holds its unpack there anyway.
   bool get hasWaited => waited || password != null || (!isUpdate && prepared != null);
 
+  /// Whether it still waits on the update question numbered [asking] ([UpdateWait.asking]), the one an answer or a window is for.
+  bool waitsOnUpdate(int asking) => state == DownloadJobState.waiting && updateWait?.asking == asking;
+
   /// Whether Cancel can stop it here and now.
   /// An install or an update between its unpack and its write has no safe stopping point,
   /// except an update job that is unpacked and waits for the install lane: it has left the unpack and not reached the write.
@@ -383,7 +387,8 @@ class DownloadJob {
         DownloadJobState.installing || DownloadJobState.done || DownloadJobState.failed => false,
       };
 
-  /// What an ended update job came to for the mod [modId], or null when it has not ended or has no such mod.
+  /// What an update job came to for the mod [modId]: once the job has ended,
+  /// and before that only for a mod skipped at its question while the job goes on. Null otherwise, or when the job has no such mod.
   UpdateModResult? resultFor(String modId) {
     for (final result in modResults) {
       if (result.mod.modId == modId) return result;

@@ -530,7 +530,21 @@ void main() {
         siblings: [target('Ellen Blue', flattensPatch: true)],
       );
 
-      expect(find.textContaining('Ellen Blue hold a patch'), findsOneWidget);
+      expect(
+        find.text('Ellen Blue holds a patch as well, and nothing records which files came from it. '
+            'Updating removes the patch from the folder, and the saved copy keeps it.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('several patches it cannot put back are said of every folder', (tester) async {
+      await openGroup(
+        tester,
+        siblings: [target('Ellen Blue', flattensPatch: true), target('Ellen Red', flattensPatch: true)],
+      );
+
+      expect(find.textContaining('Ellen Blue, Ellen Red each hold a patch as well'), findsOneWidget);
+      expect(find.textContaining('the saved copies keep it'), findsOneWidget);
     });
 
     testWidgets('it fits the narrowest window with four folders showing',

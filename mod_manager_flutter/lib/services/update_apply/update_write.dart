@@ -22,7 +22,9 @@ import '../../models/mod_origin.dart';
 import '../../models/origin_enums.dart';
 import '../../utils/gamebanana_url.dart';
 import '../../utils/state_providers.dart';
+import '../folder_contents.dart';
 import '../mod_manager_service.dart';
+import '../patch_placement.dart';
 import '../patch_record.dart';
 import '../update_check.dart';
 import '../writes_in_flight.dart';
@@ -51,6 +53,29 @@ class UpdateReport {
 
   /// The marks the write removed, by folder id, as they stood. A patch write removes none: the caller drops the folder's verdict.
   final Map<String, UpdateCheck> removedMarks;
+
+  /// This report and one more folder's write after it, as a run's job that places a patch after its bases reports both.
+  UpdateReport including(AppliedUpdate placed) {
+    final all = [...applied, placed];
+    return UpdateReport(
+      applied: all,
+      skipped: skipped,
+      removedMarks: removedMarks,
+      outcome: _withPlacement(outcome, all),
+    );
+  }
+}
+
+/// What [before] adds up to with a layer's placement after it, the last of [all]:
+/// the library changed when the placement landed or failed part-way, and a placement that is the only attempt and failed is the one failure.
+GroupWriteOutcome _withPlacement(GroupWriteOutcome before, List<AppliedUpdate> all) {
+  final placed = all.last;
+  final result = placed.result;
+  return GroupWriteOutcome(
+    settledMarks: before.settledMarks,
+    changed: before.changed || result.success || result.failure == UpdateApplyFailure.copy,
+    soleFailure: all.length == 1 && !result.success ? placed : null,
+  );
 }
 
 /// Writes what [prepared] found.
@@ -248,41 +273,29 @@ Future<UpdateReport> _writePatch(
         skipped: [mod],
       );
     }
-    result = await whileWritingMod(container, mod.id, () => services.applier.applyPatchInto(
-      modName: mod.id,
-      modFolder: request.modFolder,
+    result = await whileWritingMod(container, mod.id, () => _placeLayer(
+      services.applier,
+      mod: mod,
+      folder: request.modFolder,
       source: prepared.source,
       incoming: prepared.incoming,
       existing: prepared.existing,
       placement: prepared.placement,
       // Only a patch companion can be taken back out, so only it needs the mod's displaced files kept; a folder that is the patch has no such operation.
       patchModId: request.asCompanion ? request.remoteModId : null,
-      // This layer's own last version, so what it no longer places is taken back out.
-      recorded: mod.origin?.downloadOf(layer)?.files ?? const <InstalledFile>[],
-      // A layer above this one has overwritten some of its files in turn, and those paths are not this layer's to touch.
-      claimedAbove: _recordedAbove(mod.origin, layer),
-      onStep: onStep == null ? null : (step) => onStep(mod, step),
+      origin: mod.origin,
+      layer: layer,
+      onStep: onStep,
     ));
   } finally {
     onWritesDone?.call();
   }
-  final (:mods, :snapshots, applier: _) = services;
-  // Before the success check, as after a base update: a failed write may still have changed the folder.
-  mods.invalidateKeybinds(mod.id);
-
-  if (result.snapshot != null) {
-    container.invalidate(modBackupsProvider);
-    // Whenever one was taken: a placement that failed part-way still added a whole folder to the budget (`docs/applying-updates.md` §5).
-    await snapshots.prune();
-  }
+  await _afterPlacement(container, services, mod.id, result);
 
   final applied = [AppliedUpdate(mod: mod, result: result)];
-  final outcome = GroupWriteOutcome(
-    settledMarks: const <String>{},
-    changed: result.success || result.failure == UpdateApplyFailure.copy,
-    soleFailure: result.success ? null : applied.single,
-  );
+  final outcome = _withPlacement(const GroupWriteOutcome(settledMarks: <String>{}, changed: false), applied);
   if (!result.success) return UpdateReport(applied: applied, outcome: outcome);
+  final mods = services.mods;
 
   // One write for whichever layer this was, found by its key.
   // `ingest` is not refreshed from this archive's layout: the folder's shape belongs to its bottom layer and this archive's folder names describe a patch.
@@ -315,6 +328,136 @@ Future<UpdateReport> _writePatch(
 
   return UpdateReport(applied: applied, outcome: outcome);
 }
+
+/// Places [source] over [mod]'s [folder] as the layer [layer]: what that layer placed last ([ModOrigin.downloadOf]) and no longer places is taken out,
+/// and a path a layer above it has overwritten in turn is not this layer's to touch. [patchModId] keys the store of the files it displaces.
+Future<UpdateApplyResult> _placeLayer(
+  UpdateApplier applier, {
+  required ModInfo mod,
+  required Directory folder,
+  required Directory source,
+  required FolderContents incoming,
+  required FolderContents existing,
+  required PatchPlacement placement,
+  required int? patchModId,
+  required ModOrigin? origin,
+  required DownloadKey layer,
+  required void Function(ModInfo mod, UpdateWriteStep step)? onStep,
+}) =>
+    applier.applyPatchInto(
+      modName: mod.id,
+      modFolder: folder,
+      source: source,
+      incoming: incoming,
+      existing: existing,
+      placement: placement,
+      patchModId: patchModId,
+      recorded: origin?.downloadOf(layer)?.files ?? const <InstalledFile>[],
+      claimedAbove: _recordedAbove(origin, layer),
+      onStep: onStep == null ? null : (step) => onStep(mod, step),
+    );
+
+/// After a layer's placement, landed or not, since one that failed may still have changed the folder:
+/// its in-game keys are read again, and the snapshots pruned when one was taken, as a placement that failed part-way still added a whole folder to the budget (`docs/applying-updates.md` §5).
+Future<void> _afterPlacement(ProviderContainer container, UpdateServices services, String modId, UpdateApplyResult result) async {
+  services.mods.invalidateKeybinds(modId);
+  if (result.snapshot != null) {
+    container.invalidate(modBackupsProvider);
+    await services.snapshots.prune();
+  }
+}
+
+/// The archive folders a preview's layout maps onto the mod, and whether a patch can be placed from them.
+extension UpdatePreviewSources on UpdatePreview {
+  /// Each folder once, however many of the layout's mappings come from it.
+  List<String> get sourceFolders => sources.values.toSet().toList();
+
+  /// A patch is placed from exactly one folder ([placeUpdateAsPatch]).
+  bool get placeableAsPatch => sourceFolders.length == 1;
+}
+
+/// Places a patch-shaped download for [target]'s mod over the folder [into] as a patch layer, by placement and never by the wipe (`docs/update-runs.md` §6).
+///
+/// The folder is turned off if it was on and snapshotted, each file goes where the folder keeps the same name, the files it replaces are kept so the patch can be taken out again,
+/// and the layer is recorded on top at `exact` with the file's page and id, as a patch installed into a mod is (`docs/origin-tracking.md` §10).
+/// A patch from the same page already on the folder is that layer's last version, and is replaced.
+/// [into] is marked as being written for the whole of it, the record included.
+///
+/// [dismissBase] is given when the patch goes on top of the folder of the mod the update was for:
+/// it records on that mod's layer the dismissal Ignore writes for the check the press was made from ([UpdateMod.dismissUpTo]), so the same files are not offered again.
+///
+/// Refused as a layout failure, with nothing written, when the layout maps more than one of the archive's folders onto the mod,
+/// or the placement finds nothing in the folder to match or two places for a file.
+Future<AppliedUpdate> placeUpdateAsPatch(
+  ProviderContainer container,
+  PreparedFolders prepared, {
+  required UpdateTarget target,
+  required ModInfo into,
+  ({DownloadKey layer, DateTime until})? dismissBase,
+  void Function(ModInfo mod, UpdateWriteStep step)? onStep,
+}) =>
+    WritesInFlight.shared.track(() async {
+      final request = prepared.request;
+      final file = request.file;
+      AppliedUpdate failed(UpdateApplyFailure failure) =>
+          AppliedUpdate(mod: into, result: UpdateApplyResult.failed(failure));
+
+      final sources = target.preview.sourceFolders;
+      if (!target.preview.placeableAsPatch) return failed(UpdateApplyFailure.layout);
+      final folder = Directory(path.join(request.modsPath, into.id));
+      if (!await folder.exists()) return failed(UpdateApplyFailure.modMissing);
+
+      final services = prepared.services;
+      final mods = services.mods;
+      final origin = await mods.readModOrigin(into.id);
+      final source = Directory(sources.single);
+      final incoming = await readFolderContents(source);
+      final existing = await readFolderContents(folder);
+      final placement = resolvePatchPlacement(incoming: incoming.files, target: existing.files);
+      if (placement.needsChoice || placement.matchedNothing) return failed(UpdateApplyFailure.layout);
+
+      final patch = PatchIdentity(
+        modId: request.remoteModId,
+        name: target.mod.origin?.downloads.where((d) => d.modId == request.remoteModId).firstOrNull?.name,
+        fileId: file.idRow,
+        version: file.version,
+        versionLabel: file.description,
+        archiveMd5: prepared.unpacked.archiveMd5,
+      );
+      final result = await whileWritingMod(container, into.id, () async {
+        final applied = await _placeLayer(
+          services.applier,
+          mod: into,
+          folder: folder,
+          source: source,
+          incoming: incoming,
+          existing: existing,
+          placement: placement,
+          // Keys the store of the folder's displaced files, so the patch can be taken back out.
+          patchModId: request.remoteModId,
+          origin: origin,
+          layer: DownloadKey.patch(request.remoteModId),
+          onStep: onStep,
+        );
+        if (!applied.success) return applied;
+        await mods.updateModOrigin(into.id, (current) {
+          final next = withAppliedPatch(
+            current,
+            patch.layer.copyWith(
+              files: applied.writtenFiles,
+              // A pick below the newest listed records the rest as passed over, as every write of a layer does.
+              updatesDismissedUntil: dismissalAfterTaking(file, request.published),
+            ),
+          );
+          return dismissBase == null ? next : next.withDismissal(subject: dismissBase.layer, until: dismissBase.until);
+        });
+        return applied;
+      });
+
+      await _afterPlacement(container, services, into.id, result);
+      container.invalidate(libraryProvider);
+      return AppliedUpdate(mod: into, result: result);
+    });
 
 /// The layer a write of [modId] is about: a patch for a companion, else the base. A page can be both in one folder, so the id alone does not say which.
 DownloadKey _layerKey(int modId, {required bool asCompanion}) =>

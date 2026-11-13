@@ -406,6 +406,7 @@ Eight rules:
   newest date listed, by the same rule as the button; taking the newest listed
   clears it instead. Without this the next check reported the file the user had
   just declined. [`applying-updates.md` §4](applying-updates.md#after-a-successful-update).
+- **"Patch added" writes one on the base layer.** An update run that puts a patch-shaped file on top of the mod it was for leaves the base layer's own file as it was, so the base would list the same files as newer; the run dates that layer up to the newest file the check listed, the value Ignore writes, even when the file taken is the newest listed ([`update-runs.md`](update-runs.md) §6). The placed file is never offered to the base anyway, since another layer of the folder records it, and a base file published after the dismissal speaks up again (`test/update_check_test.dart`). A patch put into a different mod writes nothing on the mod the update was for, which keeps its update.
 
 It is deliberately **not** `tracking: "off"`. That answer says the mod is not
 from GameBanana at all and silences it forever; this one keeps the mod tracked

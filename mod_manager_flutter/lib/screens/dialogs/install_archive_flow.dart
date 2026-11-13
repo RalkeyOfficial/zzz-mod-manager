@@ -34,6 +34,7 @@ import 'duplicate_archive_dialog.dart';
 import 'import_selection_dialog.dart';
 import 'patch_install_flow.dart';
 import 'patch_install_prompt.dart';
+import 'patch_modal.dart' show PatchSource;
 
 final Logger _files = Logger('fileops');
 
@@ -329,18 +330,26 @@ Future<InstallAnswer> answerInstallQuestion(
   if (prepared.plan == null) {
     if (prepared.folders.length > 1) {
       if (!context.mounted) return AnswerKept(wait, prepared: prepared);
-      final plan = await resolveImportSelection(
+      // From the name the download **asked for**: a collision suffix has no business in the folder picker.
+      final archiveName = job.result?.requestedName ?? (job.archive == null ? null : path.basename(job.archive!.path));
+      final answer = await resolveImportSelection(
         context,
         prepared.folders,
-        // From the name the download **asked for**: a collision suffix has no business in the folder picker.
-        defaultCombinedName: path.basenameWithoutExtension(job.result?.requestedName ?? job.archive?.path ?? job.subject),
+        defaultCombinedName: path.basenameWithoutExtension(archiveName ?? job.subject),
         shaderSources: prepared.shaderSources,
+        archiveName: archiveName,
+        characterId: job.characterId,
       );
-      if (plan == null) {
+      if (answer == null) {
         return AnswerKept(
           InstallWait(InstallQuestion.severalFolders, folderCount: prepared.folders.length),
           prepared: prepared,
         );
+      }
+      final plan = answer.plan;
+      if (plan == null) {
+        logConfirmation('install.folders', accepted: false, subject: job.subject);
+        return const AnswerDeclined();
       }
       prepared = prepared.copyWith(plan: plan);
     } else {
@@ -368,12 +377,20 @@ Future<InstallAnswer> answerInstallQuestion(
       );
       const patchWait = InstallWait(InstallQuestion.patch);
       if (!context.mounted) return AnswerKept(patchWait, prepared: prepared);
-      final answer = await (prompt ?? askPatchInstall)(
-        context,
-        subjects: question.subjects,
-        library: question.library,
-        combined: question.combined,
-      );
+      final answer = prompt != null
+          ? await prompt(context, subjects: question.subjects, library: question.library, combined: question.combined)
+          : await askPatchInstall(
+              context,
+              subjects: question.subjects,
+              library: question.library,
+              combined: question.combined,
+              source: PatchSource(
+                fileName: job.result?.requestedName ?? job.file.file ?? path.basename(job.archive?.path ?? job.subject),
+                bytes: job.file.filesize,
+              ),
+              characterId: job.characterId,
+              patchAuthor: job.mod?.submitter?.name,
+            );
       if (answer == null) return AnswerKept(patchWait, prepared: prepared);
       logPatchAnswer(question, answer.destinations);
       if (answer.declined) return const AnswerDeclined();

@@ -108,6 +108,12 @@ This settles the whole design:
   as required" — never as a verdict about the folder. Rows with nothing going for
   them say nothing, so the reason means "this is why this row is here" rather than
   decorating every row alike.
+- **two hints describe a row without placing it.** "Same author", where the patch's author and the row's are both known and match,
+  and "Same character", only on a row with nothing else to say: neither enters the order, for the reason the character is absent from it (§2),
+  and both are drawn as the same dashed hint as the reasons above. On a narrow row the hints sit under the name rather than beside it, so the name keeps its room.
+- **an update's own mod is not a row.** In the patch window's update context the mod the update is for is the preselected card above the list ("Put it on top of <mod>"),
+  since the user picked this file for that mod: that is the user's evidence, not a ranking.
+  The list under "Add it to a different mod you have" is the rest of the library, ranked, with nothing picked ([`update-runs.md`](update-runs.md) §6).
 
 A narrowing control, if one is ever added, is a visible toggle the user can switch
 off — never the default state of the list.
@@ -149,7 +155,8 @@ no fixture and no library; it is ~150 requests at a polite rate.
 | `services/patch_destination_ranking.dart` | The fingerprint and the order. Pure — sets of names in, an order out |
 | `services/library_file_index.dart` | The library walk: basenames per folder, no file contents |
 | `screens/dialogs/patch_install_flow.dart` | `rankPatchDestinations` — composition, and the one judgement that a folder answers for a requirement when its recorded origin is the mod linked |
-| `screens/dialogs/patch_install_prompt.dart` | The list, the reason line, and nothing selected |
+| `screens/dialogs/patch_modal.dart` | The patch window: the list, the hints, and nothing selected, for an install and for an update |
+| `screens/dialogs/patch_install_prompt.dart` | What an install's question is about and what it answers (`PatchInstallSubject`, `PatchDestination`) |
 | `models/gamebanana/gb_requirement.dart` | `_aRequirements`, and what a url has to look like to name a mod |
 
 The fingerprint comes out of the **same walk the patch verdict was reached on**

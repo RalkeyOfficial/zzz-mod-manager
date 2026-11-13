@@ -230,16 +230,17 @@ Future<UpdateFlowOutcome> applyUpdateFlow(
       hold.release();
       queue.updateStep(download.seq, UpdateStep.confirming);
       if (!context.mounted) return UpdateFlowOutcome.notStarted;
-      final chosen = await pickUpdateFolders(
+      final picked = await pickUpdateFolders(
         context,
         mod: mod,
-        choices: [
-          for (final choice in choices)
-            ImportFolderChoice(path: choice.path, name: choice.name, looksLikeMod: choice.looksLikeMod),
-        ],
-        problem: problem,
+        choices: [for (final choice in choices) ImportFolderChoice(path: choice.path, name: choice.name)],
+        modsPath: request.modsPath,
+        // The name asked for, as the run's window has it: the file on disk can carry a suffix a name collision added.
+        archiveName: file.file ?? download.result.requestedName ?? path.basename(download.file.path),
+        heldFileDate: container.read(modUpdateChecksProvider)[mod.id]?.installedFile?.dateAdded,
         reinstall: reinstall,
       );
+      final chosen = picked?.folders;
       logConfirmation('update.layout',
           accepted: chosen != null,
           subject: mod.id,

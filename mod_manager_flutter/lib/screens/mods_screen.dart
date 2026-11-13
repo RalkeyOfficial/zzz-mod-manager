@@ -1217,12 +1217,13 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
         await cleanupTempFolders();
         return;
       }
-      final plan = await resolveImportSelection(
+      final answer = await resolveImportSelection(
         context,
         folderPaths,
         defaultCombinedName: sharedHint ?? path.basename(folderPaths.first),
         shaderSources: shaderSources,
       );
+      final plan = answer?.plan;
       if (plan == null) {
         await cleanupTempFolders();
         return;

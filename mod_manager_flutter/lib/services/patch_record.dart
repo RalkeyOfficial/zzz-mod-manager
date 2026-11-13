@@ -26,6 +26,46 @@ import '../models/origin_enums.dart';
 import 'folder_downloads.dart';
 import 'ini_resources.dart';
 
+/// The patch's **own** remote identity, for the writes that have one: a patch installed from the Marketplace, and an update's patch-shaped file placed into a mod.
+///
+/// A Marketplace download knows exactly which mod page and file it is, and that is what gets recorded against the mod it is written into.
+/// A folder dragged off a disk has no page at all, so its layer records only the files it wrote and cannot be checked for updates.
+/// The write is the same operation either way; only the bookkeeping differs.
+class PatchIdentity {
+  const PatchIdentity({
+    required this.modId,
+    this.name,
+    this.fileId,
+    this.version,
+    this.versionLabel,
+    this.archiveMd5,
+  });
+
+  final int modId;
+
+  /// The patch's mod page title, for the layer's `name`.
+  final String? name;
+  final int? fileId;
+  final String? version;
+  final String? versionLabel;
+  final String? archiveMd5;
+
+  /// **At `exact` on both axes**, which this is the one route to for a layer the user did not identify by hand:
+  /// every other one is somebody telling us about bytes they moved in themselves.
+  ///
+  /// No `role`: it is taken from the position the layer lands in, and the write that places it is what knows that.
+  ModDownload get layer => ModDownload(
+        modId: modId,
+        modIdConfidence: OriginConfidence.exact,
+        name: name,
+        fileId: fileId,
+        version: version,
+        versionLabel: versionLabel,
+        versionConfidence: OriginConfidence.exact,
+        archiveMd5: archiveMd5,
+      );
+}
+
 /// [current] recorded as **a patch whose base is missing**, with [base] named as
 /// the mod it applies to when the user has said which that is.
 ///

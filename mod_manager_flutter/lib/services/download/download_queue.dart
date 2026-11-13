@@ -23,6 +23,19 @@ import 'update_job.dart';
 
 final Logger _log = Logger('update');
 
+/// Logs a Skip at an update [question] about [mod], the job's first mod when null.
+/// Only the user's own Skip is a declined question; a [reason] the answer found is not the user saying no.
+void logUpdateQuestionSkip(DownloadJob job, UpdateQuestionKind? question, UpdateSkipReason reason, {UpdateMod? mod}) {
+  final skipped = mod ?? job.update!.primary;
+  if (reason == UpdateSkipReason.skippedByUser) {
+    logConfirmation('update.question',
+        accepted: false, subject: job.subject, fields: {'question': question?.name, 'mod': skipped.modId});
+  } else {
+    _log.info('update skipped at its question',
+        fields: {'mod': skipped.modId, 'question': question?.name, 'reason': reason.name});
+  }
+}
+
 /// The mod-archive downloader.
 ///
 /// Shared rather than per-screen so the resume bookkeeping in
@@ -125,6 +138,9 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
   /// When each update job entered the stage it is in, for the per-stage timings in the log.
   final Map<int, DateTime> _stageSince = {};
   int _nextSeq = 1;
+
+  /// How many times an update job has stopped at a question, the number each stop is given ([UpdateWait.asking]).
+  int _askings = 0;
 
   @override
   List<DownloadJob> build() {
@@ -530,7 +546,7 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
           seq,
           (j) => j
               .copyWith(state: DownloadJobState.waiting, prepared: prepared, unpacked: _unpackedOf(prepared))
-              .withUpdateWait(wait),
+              .withUpdateWait(wait.asAsking(++_askings)),
         );
       case UpdateStageWritten(:final outcome, :final results, :final report):
         final all = _modResults(job, results, (mod, _) => UpdateModResult.written(mod));
@@ -550,7 +566,7 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
         );
         _end(job, keepArchive: false);
         markDone(seq, outcome: JobOutcome.skipped);
-        _replace(seq, (j) => j.copyWith(skipReason: reason, modResults: all));
+        _replace(seq, (j) => j.copyWith(skipReason: all.first.skipReason ?? reason, modResults: all));
       case UpdateStageFailed(:final failure, :final results, :final report):
         final all = _modResults(job, results, (mod, _) => UpdateModResult(mod, UpdateModEnd.failed, failure: failure));
         _end(job, keepArchive: failure.kind == UpdateFailureKind.unpackFailed);
@@ -585,7 +601,8 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
     if (!keepArchive) unawaited(_deleteFile(job.archive));
   }
 
-  /// What came of each of [job]'s mods: [given] where the stage said, [otherwise] for the rest, in the job's order.
+  /// What came of each of [job]'s mods, in the job's order: a mod skipped at its question while the job went on keeps that skip however the job ends,
+  /// then [given] where the stage said, and [otherwise] for the rest.
   static List<UpdateModResult> _modResults(
     DownloadJob job,
     List<UpdateModResult> given,
@@ -593,7 +610,9 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
   ) =>
       [
         for (final (i, mod) in job.update!.mods.indexed)
-          given.where((result) => result.mod.sameLayerAs(mod)).firstOrNull ?? otherwise(mod, i == 0),
+          job.modResults.where((r) => r.end == UpdateModEnd.skipped && r.mod.sameLayerAs(mod)).firstOrNull ??
+              given.where((result) => result.mod.sameLayerAs(mod)).firstOrNull ??
+              otherwise(mod, i == 0),
       ];
 
   /// The unpacked folders a stage's kept state holds, the one place the queue learns what to delete.
@@ -603,17 +622,38 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
   /// An update question was answered, as [markAnswered] for an install:
   /// the job goes back in line for the unpack lane with [prepared], what the stage keeps with the answer, ahead of the jobs that have not waited.
   /// [password] is held for the unpack it was given for.
-  void answerUpdate(int seq, {Object? prepared, String? password}) {
-    if (_jobOf(seq)?.isUpdate != true) return;
+  /// [skipping] is a mod a Skip leaves out while the job goes on, whose row reads skipped at once rather than when the job ends.
+  ///
+  /// [asking] is the question the answer was given to ([UpdateWait.asking]). An answer to any other, one the job no longer waits on,
+  /// changes nothing and is false: the window was opened for a question that was skipped or answered meanwhile.
+  bool answerUpdate(int seq, {required int asking, Object? prepared, String? password, UpdateModResult? skipping}) {
+    final job = _jobOf(seq);
+    if (job == null || !job.isUpdate || !job.waitsOnUpdate(asking)) return false;
     markAnswered(seq, prepared: prepared, password: password);
+    if (skipping != null) {
+      _replace(seq, (j) => j.copyWith(modResults: [
+            for (final result in j.modResults) if (!result.mod.sameLayerAs(skipping.mod)) result,
+            skipping,
+          ]));
+    }
+    return true;
   }
 
   /// Skip, at an update question: [decline] for an update job, whose row stays as skipped for [reason].
   /// A reason other than the user's own is what the question found about the job's first mod when it was answered, such as the mod gone;
-  /// the job's other mods are skipped as sharing a file that was not written.
-  Future<void> skipUpdate(int seq, {UpdateSkipReason reason = UpdateSkipReason.skippedByUser}) async {
-    if (_jobOf(seq)?.isUpdate != true) return;
-    await _decline(seq, updateSkip: reason);
+  /// the job's other mods are skipped as sharing a file that was not written, unless [results] says what came of them.
+  /// The job's own reason is its first mod's.
+  /// Refused, as [answerUpdate] is, when [asking] is given and the job no longer waits on that question.
+  /// True when the job was skipped.
+  Future<bool> skipUpdate(
+    int seq, {
+    UpdateSkipReason reason = UpdateSkipReason.skippedByUser,
+    int? asking,
+    List<UpdateModResult> results = const <UpdateModResult>[],
+  }) async {
+    final job = _jobOf(seq);
+    if (job == null || !job.isUpdate || (asking != null && !job.waitsOnUpdate(asking))) return false;
+    return _decline(seq, updateSkip: reason, updateResults: results);
   }
 
   /// An update job's write was undone. The row stays, as [JobOutcome.undone].
@@ -749,23 +789,26 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
   /// the list. For an update run's job it is Skip, whose row stays.
   Future<void> decline(int seq) => _decline(seq);
 
-  /// [decline], an update job skipped for [updateSkip].
-  Future<void> _decline(int seq, {UpdateSkipReason updateSkip = UpdateSkipReason.skippedByUser}) async {
+  /// [decline], an update job skipped for [updateSkip], with what came of each mod where [updateResults] says.
+  /// False when the job no longer waits.
+  Future<bool> _decline(
+    int seq, {
+    UpdateSkipReason updateSkip = UpdateSkipReason.skippedByUser,
+    List<UpdateModResult> updateResults = const <UpdateModResult>[],
+  }) async {
     final job = _jobOf(seq);
-    if (job == null || job.state != DownloadJobState.waiting) return;
-    final question = (job.updateWait?.question ?? job.wait?.question)?.name;
-    if (!job.isUpdate || updateSkip == UpdateSkipReason.skippedByUser) {
-      logConfirmation(job.isUpdate ? 'update.question' : 'install.question',
-          accepted: false, subject: job.subject, fields: {'question': question});
+    if (job == null || job.state != DownloadJobState.waiting) return false;
+    if (!job.isUpdate) {
+      logConfirmation('install.question', accepted: false, subject: job.subject, fields: {'question': job.wait?.question.name});
     } else {
-      _log.info('update skipped at its question',
-          fields: {'mod': job.update!.primary.modId, 'question': question, 'reason': updateSkip.name});
+      final wait = job.updateWait;
+      logUpdateQuestionSkip(job, wait?.question, updateSkip, mod: job.update!.modIn(wait?.modId ?? ''));
     }
     if (job.isUpdate) {
       // The user's Skip is every mod's own; a reason the answer found is the first mod's, and the others share its file.
       final all = _modResults(
         job,
-        const [],
+        updateResults,
         (mod, first) => UpdateModResult.skipped(
           mod,
           first || updateSkip == UpdateSkipReason.skippedByUser ? updateSkip : UpdateSkipReason.sharedFileNotWritten,
@@ -774,7 +817,7 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
       markDone(seq, outcome: JobOutcome.skipped);
       _replace(
         seq,
-        (j) => j.copyWith(skipReason: updateSkip, modResults: all).withNoQuestion(),
+        (j) => j.copyWith(skipReason: all.first.skipReason ?? updateSkip, modResults: all).withNoQuestion(),
       );
     } else {
       _completeError(seq, const DownloadCancelledException());
@@ -783,6 +826,7 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
     _pump();
     await _deleteFile(job.archive);
     await ArchiveService.deleteExtraction(job.unpacked);
+    return true;
   }
 
   /// Finished: [outcome], the mod folders it [installed], where it [filedUnder], and for an install that put nothing

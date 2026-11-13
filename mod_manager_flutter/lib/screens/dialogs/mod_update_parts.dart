@@ -19,12 +19,13 @@ class UpdateHint extends StatelessWidget {
   }
 }
 
-/// A group of rows under its caps label: "You have", "Newer on GameBanana".
+/// A group of rows under its caps label (the boards' `.lbl`): "You have", "Newer on GameBanana". [caption] is a grey line under it.
 class UpdateGroup extends StatelessWidget {
-  const UpdateGroup({super.key, required this.label, required this.child});
+  const UpdateGroup({super.key, required this.label, required this.child, this.caption});
 
   final String label;
   final Widget child;
+  final String? caption;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -36,6 +37,7 @@ class UpdateGroup extends StatelessWidget {
         child: Text(label.toUpperCase(), style: ZenithType.of(context).caps.copyWith(color: ZenithPalette.of(context).text3)),
       ),
       child,
+      if (caption case final caption?) UpdateHint(caption),
     ],
   );
 }

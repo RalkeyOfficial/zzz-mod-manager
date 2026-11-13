@@ -14,6 +14,7 @@ import '../../services/download/queue_policy.dart';
 import '../../services/download/update_job.dart';
 import '../../services/log/confirmations.dart';
 import '../../services/log/logger.dart';
+import '../../services/patch_scan.dart';
 import '../../services/platform_service.dart';
 import '../../services/shader_fixes/shader_fixes_service.dart';
 import '../../services/update_apply/update_run_stages.dart';
@@ -25,6 +26,10 @@ import '../../utils/state_providers.dart';
 import '../dialogs/archive_password_dialog.dart';
 import '../dialogs/import_selection_dialog.dart' show ImportFolderChoice, pickUpdateFolders;
 import '../dialogs/install_archive_flow.dart';
+import '../dialogs/patch_install_flow.dart' show patchWindowNames, preparePatchQuestion;
+import '../dialogs/patch_install_prompt.dart' show PatchInstallSubject, PatchKind;
+import '../dialogs/patch_modal.dart';
+import '../dialogs/unrecorded_patch_dialog.dart';
 import 'install_result_feedback.dart';
 import 'network_link_notice.dart';
 import 'resolve/resolve_fragments.dart' show formatResolveDate;
@@ -53,6 +58,9 @@ const String kUpdatesDeck = 'updates';
 
 /// The key every finished update's Done card is counted on, "3 mods updated".
 const String kUpdatesDoneRepeat = 'update-run-done';
+
+/// The key every update whose file went on top of its mod as a patch is counted on, "Patch added to 3 mods".
+const String kUpdatesPatchRepeat = 'update-run-patch';
 
 /// Returns once no bulk action of the All mods table is running. An enable in the middle of one could break a
 /// character's One at a time, which the bulk action is setting mod by mod; the Library's switches are greyed out
@@ -148,6 +156,70 @@ Future<List<String>> turnOnNewMods(
   return leftOff;
 }
 
+/// What the patch window shows for an update's question about [mod]'s patch-shaped file, [pick] of [job].
+/// A test substitutes its own, so it can hold the ranking.
+typedef UpdatePatchQuestioner = Future<PatchUpdateContext> Function(
+  ProviderContainer container,
+  DownloadJob job,
+  ModInfo mod,
+  UpdateMod pick,
+  UpdatePatchFinding finding,
+);
+
+/// [UpdatePatchQuestioner]: the library ranked by the file's own names, and what its `.ini` asks for that it does not carry.
+Future<PatchUpdateContext> updatePatchQuestion(
+  ProviderContainer container,
+  DownloadJob job,
+  ModInfo mod,
+  UpdateMod pick,
+  UpdatePatchFinding finding,
+) async {
+  final library = container.read(modsProvider);
+  final modsPath = await _updateModsPath();
+  PatchInstallSubject? scanned;
+  if (modsPath != null) {
+    final scan = await scanPlannedMods([
+      PlannedMod(
+        name: mod.name,
+        sources: {for (final source in finding.sources) source: finding.sources.length == 1 ? '' : p.basename(source)},
+      ),
+    ]);
+    final question = await preparePatchQuestion(
+      scan: scan,
+      combined: false,
+      modsPath: modsPath,
+      patchModId: pick.layer.modId,
+      patchFileId: job.file.idRow,
+      library: library,
+    );
+    scanned = question.subjects.firstOrNull;
+  }
+  return PatchUpdateContext(
+    mod: mod,
+    library: library,
+    source: PatchSource(fileName: job.file.file ?? job.result?.requestedName ?? job.subject, bytes: job.file.filesize),
+    // Without the library folder there is nothing to rank by, so the stage's own finding is listed unranked.
+    subject: scanned ??
+        PatchInstallSubject(
+          modName: mod.name,
+          patchModId: pick.layer.modId,
+          patchFileId: job.file.idRow,
+          kind: PatchKind.references,
+          missingFiles: patchWindowNames(finding.missing),
+        ),
+  );
+}
+
+/// The library folder the run writes into, or null when it cannot be read.
+Future<String?> _updateModsPath() async {
+  try {
+    return await updateLibraryFolder();
+  } catch (error) {
+    _updateLog.warning('library folder not read for an update question', error: error);
+    return null;
+  }
+}
+
 /// The way from a panel row to the questions [DownloadQueueHost] asks.
 ///
 /// The host asks from its own context, which is below the `Navigator` and outlives the panel; the panel is a route
@@ -157,11 +229,20 @@ final downloadQuestionsProvider = Provider<DownloadQuestions>((ref) => DownloadQ
 
 class DownloadQuestions {
   Future<void> Function(int seq)? _answer;
+  Future<void> Function(int seq)? _updateAnyway;
   void Function(int seq)? _openModPage;
+  int Function()? _countInHand;
 
-  /// The waiting job's own button: Enter password, Install anyway, Pick folders… or Choose…. Opens the question's
-  /// dialog, and the ones after it in the same sitting.
+  /// How many update questions a press is answering, from the press until the answer or Skip is stored.
+  @visibleForTesting
+  int get questionsInHand => _countInHand?.call() ?? 0;
+
+  /// The waiting job's own button: Enter password, Install anyway, Pick folders… or Choose…, and an update row's Answer.
+  /// Opens the question's window, and the ones after it in the same sitting.
   Future<void> answer(int seq) => _answer?.call(seq) ?? Future<void>.value();
+
+  /// Update anyway, on the panel row of an update whose folder holds a patch nothing records: answered on the row, with no window.
+  Future<void> updateAnyway(int seq) => _updateAnyway?.call(seq) ?? Future<void>.value();
 
   /// Open mod page: the job's mod page in Browse, the job still waiting.
   void openModPage(int seq) => _openModPage?.call(seq);
@@ -196,9 +277,13 @@ class DownloadQueueHost extends ConsumerStatefulWidget {
     this.enabler = ApiService.enableMod,
     this.updatePreparer = prepareUpdateJob,
     this.updateWriter = writeUpdateJob,
+    this.patchQuestioner = updatePatchQuestion,
   });
 
   final Widget child;
+
+  /// Seam for tests. Production is [updatePatchQuestion], what the patch window of an update's question shows.
+  final UpdatePatchQuestioner patchQuestioner;
 
   /// Seam for tests. Production is [prepareUpdateJob], an update job's unpack and preview.
   final UpdatePreparer updatePreparer;
@@ -232,14 +317,17 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
   /// Whether a question's dialog is open, so a second press does not stack another.
   bool _answering = false;
 
+  /// The update questions a press is answering, by the job's `seq` and the question's number (`UpdateWait.asking`).
+  final Set<(int, int)> _inHand = {};
+
   /// Each download's Working card, by the job's `seq`, from the moment it is
   /// raised until its result takes the card over or the job leaves the queue.
   /// A card the user hid stays here, so its result still arrives.
   final Map<int, NotificationHandle> _cards = {};
 
-  /// The one Needs you card for every waiting download, and the downloads it was last told about.
+  /// The one Needs you card for every waiting download, and the downloads it was last told about, in the order they started waiting.
   NotificationHandle? _needsYou;
-  Set<int> _waiting = const <int>{};
+  List<int> _waiting = const <int>[];
 
   /// The update deck's Working cards, oldest first: the first is the deck's front, so it shows the job furthest along.
   final List<NotificationHandle> _updateCards = [];
@@ -262,7 +350,9 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
     super.initState();
     _questions = ref.read(downloadQuestionsProvider)
       .._answer = _answer
-      .._openModPage = _openModPage;
+      .._updateAnyway = _updateAnyway
+      .._openModPage = _openModPage
+      .._countInHand = (() => _inHand.length);
     // Reconcile with whatever the queue already holds, rather than waiting for
     // the next change. Nothing is in flight on a cold start, but a hot reload
     // rebuilds this host under a live queue, and reacting only to changes would
@@ -285,7 +375,9 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
     if (_questions._answer == _answer) {
       _questions
         .._answer = null
-        .._openModPage = null;
+        .._updateAnyway = null
+        .._openModPage = null
+        .._countInHand = null;
     }
     super.dispose();
   }
@@ -380,11 +472,14 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
   /// moves to the newest place, and the card that said it before goes. A hidden Working card comes back this way,
   /// since hiding the progress never hides what comes of it, and so does a Needs you card the user closed. A download
   /// leaving the wait only changes the card's text, and the card goes once nothing waits.
+  ///
+  /// Its Answer opens the window of the question that has waited longest and leaves the card up, since a window closed without an answer leaves the question waiting.
+  /// Open Downloads stays beside it.
   void _syncNeedsYou(List<DownloadJob> jobs) {
     final waiting = [for (final job in jobs) if (job.state == DownloadJobState.waiting) job];
     final seqs = {for (final job in waiting) job.seq};
-    final joined = seqs.difference(_waiting);
-    _waiting = seqs;
+    final joined = seqs.difference(_waiting.toSet());
+    _waiting = [for (final seq in _waiting) if (seqs.contains(seq)) seq, for (final job in waiting) if (joined.contains(job.seq)) job.seq];
 
     if (waiting.isEmpty) {
       _needsYou?.dismiss();
@@ -399,8 +494,19 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
         : loc.plural('downloads.needs_you_many', waiting.length, params: {'count': '${waiting.length}'});
     final body = one?.subject ?? subjectList(loc, [for (final job in waiting) job.subject]);
     final characterId = one?.characterId;
-    // About the list rather than one mod, so it stays with several.
-    final actions = [openDownloadsAction(loc, ProviderScope.containerOf(context, listen: false))];
+    // About the list rather than one mod, so both stay with several.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final openDownloads = openDownloadsAction(loc, container);
+    final actions = [
+      NotificationAction(loc.t('notifications.actions.answer'), () {
+        if (_waiting.isEmpty) return;
+        final oldest = container.read(downloadQueueProvider).where((j) => j.seq == _waiting.first).firstOrNull;
+        // The already-installed question has no window: its two answers are its row's buttons, which the panel shows.
+        if (oldest?.wait?.question == InstallQuestion.alreadyInstalled) return openDownloads.onPressed();
+        unawaited(_answer(_waiting.first));
+      }, closes: false),
+      openDownloads,
+    ];
 
     if (joined.isEmpty) {
       _needsYou?.update(
@@ -489,10 +595,10 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
   /// ([updatesInOrderOfWork]) and "2 more updating" under it. The cards are not each tied to a job: the oldest takes
   /// the furthest-along job's words, so the front stays the furthest along whatever order the jobs started in.
   ///
-  /// A job that ends tells its result once: the mods it wrote are counted on one Done card, "3 mods updated", whose
-  /// Show opens the Downloads panel, and each mod that failed has an Error card of its own. A skip says nothing, since
-  /// the user pressed it or the row says why. A halt is one Error card that stays until it is closed, in place of the
-  /// failure that caused it. A question is on the Needs you card ([_syncNeedsYou]).
+  /// A job that ends tells its result once: the mods it updated are counted on one Done card, "3 mods updated", whose Show opens the Downloads panel,
+  /// the mods whose file went on top as a patch on another, "Patch added to 2 mods", and each mod that failed has an Error card of its own.
+  /// A skip says nothing, since the user pressed it or the row says why.
+  /// A halt is one Error card that stays until it is closed, in place of the failure that caused it. A question is on the Needs you card ([_syncNeedsYou]).
   void _syncUpdates(List<DownloadJob> jobs) {
     final loc = context.loc;
     final notify = context.notify;
@@ -555,8 +661,8 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
     }
   }
 
-  /// What came of an ended update job, told once: its written mods on the counted Done card, and an Error card for each
-  /// mod that failed. The failure of the mod that halted the run ([halt]) is told by the halt's card instead.
+  /// What came of an ended update job, told once: its updated mods on the counted Done card,
+  /// its patches put on top on their own counted Done card, and an Error card for each mod that failed. The failure of the mod that halted the run ([halt]) is told by the halt's card instead.
   void _reportUpdateEnd(
     DownloadJob job,
     AppLocalizations loc,
@@ -568,26 +674,45 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
     String nameOf(String modId) => _updateModName(library[modId], job, modId);
     final report = job.report is UpdateReport ? job.report! as UpdateReport : null;
 
-    final written = [for (final r in job.modResults) if (r.end == UpdateModEnd.written) r.mod.modId];
-    if (written.isNotEmpty && job.outcome != JobOutcome.undone) {
-      final heldDate = written.length == 1 ? report?.removedMarks[written.single]?.installedFile?.dateAdded : null;
-      // About the list the mods are all in, so the card keeps it when it counts several.
-      final show = [openDownloadsAction(loc, container, label: loc.t('downloads.show'))];
+    // A patch put on top replaced no file, so it is told apart from an update: its own card, counted on its own.
+    final written = [for (final r in job.modResults) if (r.end == UpdateModEnd.written && !r.patchAdded) r.mod.modId];
+    final patched = [for (final r in job.modResults) if (r.patchAdded) r.mod.modId];
+    // About the list the mods are all in, so the card keeps it when it counts several.
+    final show = [openDownloadsAction(loc, container, label: loc.t('downloads.show'))];
+    // One Done card for [mods], counted on [repeat] with the other jobs' cards of its kind.
+    void done(List<String> mods, String repeat, {required String title, required String body, required String many}) {
+      if (mods.isEmpty || job.outcome == JobOutcome.undone) return;
       notify.done(
-        loc.t('downloads.update.done_title', params: {'mod': nameOf(written.first)}),
-        body: heldDate == null
-            ? loc.t('downloads.update.done_body_undated')
-            : loc.t('downloads.update.done_body', params: {'date': formatResolveDate(heldDate)}),
-        characterId: library[written.first]?.characterId ?? job.characterId,
+        loc.t(title, params: {'mod': nameOf(mods.first)}),
+        body: body,
+        characterId: library[mods.first]?.characterId ?? job.characterId,
         actions: show,
         repeat: NotificationRepeat(
-          kUpdatesDoneRepeat,
-          subjects: [for (final id in written) nameOf(id)],
-          title: (count) => loc.plural('downloads.update.done_many', count, params: {'count': '$count'}),
+          repeat,
+          subjects: [for (final id in mods) nameOf(id)],
+          title: (count) => loc.plural(many, count, params: {'count': '$count'}),
           countedActions: show,
         ),
       );
     }
+
+    done(
+      patched,
+      kUpdatesPatchRepeat,
+      title: 'downloads.update.patch_done_title',
+      body: loc.t('downloads.update.patch_done_body'),
+      many: 'downloads.update.patch_done_many',
+    );
+    final heldDate = written.length == 1 ? report?.removedMarks[written.single]?.installedFile?.dateAdded : null;
+    done(
+      written,
+      kUpdatesDoneRepeat,
+      title: 'downloads.update.done_title',
+      body: heldDate == null
+          ? loc.t('downloads.update.done_body_undated')
+          : loc.t('downloads.update.done_body', params: {'date': formatResolveDate(heldDate)}),
+      many: 'downloads.update.done_many',
+    );
 
     final failed = [
       for (final r in job.modResults)
@@ -674,11 +799,12 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
   // ── Asking ─────────────────────────────────────────────────────────────────
 
   Future<void> _answer(int seq) async {
-    if (_answering || !mounted) return;
+    if (!mounted) return;
     final queue = ref.read(downloadQueueProvider.notifier);
     final job = ref.read(downloadQueueProvider).where((j) => j.seq == seq).firstOrNull;
     if (job == null || job.state != DownloadJobState.waiting) return;
     if (job.isUpdate) return _answerUpdate(job);
+    if (_answering) return;
 
     _answering = true;
     try {
@@ -701,75 +827,267 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
     }
   }
 
-  /// An update's question, from this host's context, answered through `DownloadQueue.answerUpdate`
-  /// (`docs/update-runs.md` §6): the archive's password, asked again when it did not open it, and which of the archive's
-  /// folders is the mod, in the existing folder picker. Closing either window leaves the question waiting; only Skip
-  /// ends it, which the password window offers in place of Don't install. The other questions are not asked here, and
-  /// wait with only Skip.
-  Future<void> _answerUpdate(DownloadJob job) async {
+  /// Update anyway, from the panel row of an update whose folder holds a patch nothing records: the question answered without its window,
+  /// and the questions after it asked in the same sitting. An open window does not hold it back, since it opens none.
+  Future<void> _updateAnyway(int seq) async {
+    if (!mounted) return;
+    final job = ref.read(downloadQueueProvider).where((j) => j.seq == seq).firstOrNull;
+    if (job == null || job.state != DownloadJobState.waiting || job.updateWait?.question != UpdateQuestionKind.unrecordedPatch) {
+      return;
+    }
+    await _answerUpdate(job, updateAnyway: true);
+  }
+
+  /// How long an answered update may take to come back with its next question and still have it asked in the same sitting.
+  /// The answered job goes ahead of the jobs that have not waited, so this is the unpack in flight, if any, and a preview.
+  static const Duration _sameSitting = Duration(seconds: 20);
+
+  /// An update's question, from this host's context, answered through `DownloadQueue.answerUpdate` (`docs/update-runs.md` §6):
+  /// the archive's password, which of the archive's folders is the mod (the folders window), a download shaped like a patch (the patch window),
+  /// and a patch nothing records in the folder (a small question). Each opens only its own window.
+  ///
+  /// Closing a window leaves the question waiting; only Skip ends it, for the mod the question is about ([skipUpdateQuestion]).
+  /// An answer sends the job back in line, and a question it comes back with soon is asked in the same sitting, as an install's are:
+  /// Pick folders is followed by the patch scan of that selection.
+  /// A question about a mod no longer in the library, or whose update was ignored or written by something else while it waited, opens nothing and skips that mod.
+  /// [updateAnyway] answers the first question, an unrecorded patch, without its window.
+  ///
+  /// One window is open at a time: [_answering] is held only while a window is open, whose answer is stored as it closes ([_inWindow]).
+  /// The reads before a window and the wait for the answered job are not under it, so the other questions can be answered meanwhile.
+  /// A question whose window comes to open while another is open, the job's next one included, waits for its own Answer.
+  /// A question is [_inHand] from the press until its answer or Skip is stored, so another press for it does nothing meanwhile.
+  Future<void> _answerUpdate(DownloadJob job, {bool updateAnyway = false}) async {
+    var current = job;
+    var direct = updateAnyway;
+    while (mounted && current.updateWait != null) {
+      final question = (current.seq, current.updateWait!.asking);
+      if (!_inHand.add(question)) return;
+      bool answered;
+      try {
+        answered = await _askUpdate(current, updateAnyway: direct);
+      } catch (error, stack) {
+        // The job keeps waiting, so the question can be asked again.
+        _updateLog.error('update question failed', error: error, stack: stack, fields: {'download': current.subject});
+        return;
+      } finally {
+        _inHand.remove(question);
+      }
+      direct = false;
+      if (!answered || !mounted) return;
+      final next = await _askedAgain(current.seq);
+      if (next == null) return;
+      current = next;
+    }
+  }
+
+  /// Asks [job]'s question. True when it was answered and the job went back in line, false when it was closed, skipped or left for the mod page,
+  /// or when its window did not open.
+  /// An answer or a Skip is stored only for the question the window was opened for: one skipped or answered meanwhile refuses it, and nothing is said or logged.
+  Future<bool> _askUpdate(DownloadJob job, {bool updateAnyway = false}) async {
     final wait = job.updateWait;
-    if (wait == null || !updateQuestionAnswerable(wait.question)) return;
-    final queue = ref.read(downloadQueueProvider.notifier);
+    if (wait == null) return false;
+    final container = ProviderScope.containerOf(context, listen: false);
+    final queue = container.read(downloadQueueProvider.notifier);
     final loc = context.loc;
-    _answering = true;
-    try {
-      switch (wait.question) {
-        case UpdateQuestionKind.password:
-          final answer = await showArchivePasswordDialog(
+    final kept = job.updateKept;
+    final task = job.update!;
+    final aboutId = wait.modId ?? task.primary.modId;
+    final pick = task.modIn(aboutId) ?? task.primary;
+    final library = ref.read(modsProvider);
+    final mod = pickedModIn(library, pick);
+
+    // Nothing is left to answer for, so the question ends as its write would have.
+    final leftOut = await modsLeftOutOrAnswered(container, job);
+    if (!mounted) return false;
+    if (wait.question == UpdateQuestionKind.password) {
+      if (task.mods.every((m) => leftOut.containsKey(m.modId))) {
+        await queue.skipUpdate(
+          job.seq,
+          reason: leftOut[task.primary.modId]!.skipReason!,
+          asking: wait.asking,
+          results: leftOut.values.toList(),
+        );
+        return false;
+      }
+    } else if (mod == null) {
+      await skipUpdateQuestion(container, job, reason: missingPickReason(library, pick));
+      return false;
+    } else if (leftOut[aboutId] case final result?) {
+      await skipUpdateQuestion(container, job, reason: result.skipReason!);
+      return false;
+    }
+
+    switch (wait.question) {
+      case UpdateQuestionKind.password:
+        final (:opened, :answer) = await _inWindow(
+          job.seq,
+          wait.asking,
+          () => showArchivePasswordDialog(
             context,
             modName: job.subject,
             failed: wait.passwordFailed,
             declineLabel: loc.t('downloads.update.skip'),
             confirmLabel: loc.t('downloads.update.password_confirm'),
-          );
-          switch (answer) {
-            case PasswordGiven(:final password):
-              queue.answerUpdate(job.seq, password: password);
-            case PasswordDeclined():
-              // Skip logs itself as the declined question.
-              await queue.skipUpdate(job.seq);
-            case PasswordOpenModPage():
-              _updateLog.info('update question left for the mod page',
-                  fields: {'download': job.subject, 'question': wait.question.name});
-              _openModPage(job.seq);
-            case null:
-              logConfirmation('update.password', accepted: false, subject: job.subject, dismissed: true);
-          }
-        case UpdateQuestionKind.folders:
-          final kept = job.prepared is UpdateRunKept ? job.prepared! as UpdateRunKept : null;
-          final question = kept?.foldersQuestion;
-          final pick = job.update!.primary;
-          final library = ref.read(modsProvider);
-          final mod = pickedModIn(library, pick);
-          // Nothing is left to pick folders for, so the question ends as its write would have.
-          if (mod == null) return await queue.skipUpdate(job.seq, reason: missingPickReason(library, pick));
-          if (kept == null || question == null || !mounted) return;
-          final chosen = await pickUpdateFolders(
+          ),
+        );
+        if (!opened) return false;
+        switch (answer) {
+          case PasswordGiven(:final password):
+            return queue.answerUpdate(job.seq, asking: wait.asking, password: password);
+          case PasswordDeclined():
+            // Skip logs itself as the declined question.
+            await queue.skipUpdate(job.seq, asking: wait.asking);
+          case PasswordOpenModPage():
+            _updateLog.info('update question left for the mod page',
+                fields: {'download': job.subject, 'question': wait.question.name});
+            _openModPage(job.seq);
+          case null:
+            logConfirmation('update.password', accepted: false, subject: job.subject, dismissed: true);
+        }
+        return false;
+
+      case UpdateQuestionKind.folders:
+        final question = kept?.foldersQuestion;
+        if (kept == null || question == null || mod == null) return false;
+        final modsPath = await _updateModsPath();
+        if (!mounted) return false;
+        final (:opened, answer: picked) = await _inWindow(
+          job.seq,
+          wait.asking,
+          () => pickUpdateFolders(
             context,
             mod: mod,
-            choices: [
-              for (final choice in question.choices)
-                ImportFolderChoice(path: choice.path, name: choice.name, looksLikeMod: choice.looksLikeMod),
-            ],
-            problem: question.problem,
-          );
-          logConfirmation('update.layout',
-              accepted: chosen != null,
-              subject: mod.id,
-              dismissed: chosen == null,
-              fields: {
-                'problem': question.problem.name,
-                if (chosen != null) 'folders': [for (final folder in chosen) p.basename(folder)],
-              });
-          if (chosen != null) queue.answerUpdate(job.seq, prepared: kept.withPickedFolders(chosen));
-        case UpdateQuestionKind.patchShaped || UpdateQuestionKind.unrecordedPatch:
-          break;
-      }
-    } catch (error, stack) {
-      // The job keeps waiting, so the question can be asked again.
-      _updateLog.error('update question failed', error: error, stack: stack, fields: {'download': job.subject});
+            choices: [for (final choice in question.choices) ImportFolderChoice(path: choice.path, name: choice.name)],
+            modsPath: modsPath,
+            archiveName: job.file.file ?? job.result?.requestedName,
+            heldFileDate: container.read(modUpdateChecksProvider)[mod.id]?.installedFile?.dateAdded,
+          ),
+        );
+        if (!opened) return false;
+        final chosen = picked?.folders;
+        return _settle(
+          container,
+          job,
+          'update.layout',
+          subject: mod.id,
+          closed: picked == null,
+          store: chosen == null
+              ? null
+              : () => queue.answerUpdate(job.seq, asking: wait.asking, prepared: kept.withPickedFolders(chosen)),
+          fields: {
+            'problem': question.problem.name,
+            if (chosen != null) 'folders': [for (final folder in chosen) p.basename(folder)],
+          },
+        );
+
+      case UpdateQuestionKind.patchShaped:
+        final finding = kept?.patchQuestion;
+        if (kept == null || finding == null || mod == null) return false;
+        // Asked before the library is ranked as well, so a question whose window could not open ranks nothing.
+        if (!_mayOpen(job.seq, wait.asking)) return false;
+        final question = await widget.patchQuestioner(container, job, mod, pick, finding);
+        if (!mounted) return false;
+        final (:opened, :answer) = await _inWindow(job.seq, wait.asking, () => showUpdatePatchModal(context, question));
+        if (!opened) return false;
+        final into = answer?.modId;
+        return _settle(
+          container,
+          job,
+          'update.patch',
+          subject: mod.id,
+          closed: answer == null,
+          store: into == null
+              ? null
+              : () => queue.answerUpdate(job.seq, asking: wait.asking, prepared: kept.withAnswer(aboutId, PlaceAsPatch(into))),
+          fields: {if (into != null) 'into': into, if (into != null) 'on_top': into == mod.id},
+        );
+
+      case UpdateQuestionKind.unrecordedPatch:
+        if (kept == null || mod == null) return false;
+        final UnrecordedPatchAnswer? answer;
+        if (updateAnyway) {
+          answer = UnrecordedPatchAnswer.updateAnyway;
+        } else {
+          final shown = await _inWindow(job.seq, wait.asking, () => showUnrecordedPatchDialog(context, mod: mod));
+          if (!shown.opened) return false;
+          answer = shown.answer;
+        }
+        return _settle(
+          container,
+          job,
+          'update.unrecorded_patch',
+          subject: mod.id,
+          closed: answer == null,
+          store: answer == UnrecordedPatchAnswer.updateAnyway
+              ? () => queue.answerUpdate(job.seq, asking: wait.asking, prepared: kept.withAnswer(aboutId, const UpdateAnyway()))
+              : null,
+        );
+    }
+  }
+
+  /// Stores what [job]'s question came to and logs it as the confirmation [action] about [subject].
+  /// [closed] is the window closed without an answer; otherwise [store] stores the answer, false when the queue refused it, and without one it is the window's Skip.
+  /// An answer or a Skip the queue refused, since its question was skipped or answered meanwhile, logs nothing. True when an answer was stored.
+  Future<bool> _settle(
+    ProviderContainer container,
+    DownloadJob job,
+    String action, {
+    required String subject,
+    required bool closed,
+    bool Function()? store,
+    Map<String, Object?> fields = const <String, Object?>{},
+  }) async {
+    if (closed) {
+      logConfirmation(action, accepted: false, subject: subject, dismissed: true, fields: fields);
+      return false;
+    }
+    final stored = store?.call() ?? false;
+    final taken = store == null ? await skipUpdateQuestion(container, job) : stored;
+    if (taken) logConfirmation(action, accepted: stored, subject: subject, fields: fields);
+    return stored;
+  }
+
+  /// Whether a window may open for the question numbered [asking] of the job [seq]:
+  /// no other window is open, and the job still waits on that question.
+  bool _mayOpen(int seq, int asking) {
+    if (!mounted || _answering) return false;
+    final job = ref.read(downloadQueueProvider).where((j) => j.seq == seq).firstOrNull;
+    return job != null && job.waitsOnUpdate(asking);
+  }
+
+  /// Opens a window for the question numbered [asking] of the job [seq], and gives what it came to,
+  /// unless it may not open ([_mayOpen]), which is asked again here since the question may have been skipped or answered while the window was read: then [opened] is false.
+  /// [_answering] is held while the window is open.
+  Future<({bool opened, T? answer})> _inWindow<T>(int seq, int asking, Future<T?> Function() open) async {
+    if (!_mayOpen(seq, asking)) return (opened: false, answer: null);
+    _answering = true;
+    try {
+      return (opened: true, answer: await open());
     } finally {
       _answering = false;
+    }
+  }
+
+  /// Once an answered update leaves the unpack lane: the job when it came back waiting on another question, and null when it went on,
+  /// ended, or took longer than [_sameSitting].
+  Future<DownloadJob?> _askedAgain(int seq) async {
+    final done = Completer<DownloadJob?>();
+    void check(List<DownloadJob> jobs) {
+      if (done.isCompleted) return;
+      final job = jobs.where((j) => j.seq == seq).firstOrNull;
+      final inLine = job != null &&
+          (job.state == DownloadJobState.downloaded ||
+              (job.state == DownloadJobState.updating && job.updateStep == UpdateStep.unpacking));
+      if (inLine) return;
+      done.complete(job?.state == DownloadJobState.waiting ? job : null);
+    }
+
+    final subscription = ref.listenManual<List<DownloadJob>>(downloadQueueProvider, (_, jobs) => check(jobs));
+    check(ref.read(downloadQueueProvider));
+    try {
+      return await done.future.timeout(_sameSitting, onTimeout: () => null);
+    } finally {
+      subscription.close();
     }
   }
 

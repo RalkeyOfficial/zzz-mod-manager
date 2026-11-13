@@ -1150,3 +1150,14 @@ there is nothing — so the write only ever *adds* a layer and never clears one.
 Once answered, the row states **both axes**: which mod, and which file of it.
 Naming only the mod leaves a recorded file indistinguishable from "I don't know which" — two states that are checked differently and one of which puts a blue mark on the card.
 The file half is phrased by `describeRecordedFile`, the same function the resolve dialog's own "currently tracked" line uses (`summarizeDownload` folds a layer into the summary that feeds it), so "the file you chose" cannot come to mean one thing about one layer of a folder and something else about another.
+
+### An update that turns out to be a patch
+
+An update run asks the same question when the file picked for a mod's base is shaped like a patch, since writing it as a base would clear the folder down to the patch ([`update-runs.md`](update-runs.md) §6). Its two answers add a layer, by the placement above (`placeUpdateAsPatch`), and never write by the clear:
+
+| Answer | What the folder records |
+|---|---|
+| Put it on top of the mod the update is for | A layer on top with the file's page and id at `exact`, the files it placed, and the dismissal any write of a layer takes for the files listed above the pick. Below it, the base layer keeps its file and gains a dismissal up to the newest file the check listed, the value Ignore writes, so the same files are not offered again. The page is often the base's own: a base and a patch of one page are two layers ([above](#two-layers-of-one-page)). |
+| Add it to a different mod you have | The same layer on top of that mod's folder, which is marked as being written while it lands. The mod the update was for records nothing and keeps its update. |
+
+A patch already on the folder from the same page is that layer's last version, and is replaced as any patch from one page replaces another. Both folders' session verdicts that a layer changed are dropped, since a verdict names the layers it read.

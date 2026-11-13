@@ -135,7 +135,7 @@ void main() {
       expect(needsYou.body, 'Ellen Swimsuit');
       expect(needsYou.characterId, 'ellen');
       expect(needsYou.deck, isNull, reason: 'a waiting download leaves the deck');
-      expect(needsYou.actions.map((a) => a.label), ['Open Downloads']);
+      expect(needsYou.actions.map((a) => a.label), ['Answer', 'Open Downloads']);
 
       gate.release(InstallEnds(InstallResult.success(const ['Mod 2'])));
       await frames(t);
@@ -226,7 +226,7 @@ void main() {
       expect(needsYou.title, '2 downloads are waiting for your answer');
       expect(needsYou.body, 'Mod 1 and Mod 2');
       expect(needsYou.characterId, isNull);
-      expect(needsYou.actions.map((a) => a.label), ['Open Downloads'], reason: 'about the list, so it stays');
+      expect(needsYou.actions.map((a) => a.label), ['Answer', 'Open Downloads'], reason: 'about the list, so both stay');
       expect(cards.last.id, needsYou.id, reason: 'a download joining it is news');
     });
 

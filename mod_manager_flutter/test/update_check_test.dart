@@ -1254,6 +1254,52 @@ void main() {
     });
   });
 
+  /// An update run that found its file shaped like a patch puts it on top of the mod as a layer of the same page,
+  /// and records on the base the dismissal Ignore writes, up to the newest file the check listed (`docs/update-runs.md` §6).
+  group('a patch an update put on top of its own mod', () {
+    const pageId = 700;
+    final main = GbFile(idRow: 1, file: 'main.zip', dateAdded: DateTime.utc(2026, 1));
+    final picked = GbFile(idRow: 5, file: 'main_fixed.zip', dateAdded: DateTime.utc(2026, 3));
+    final passedOver = GbFile(idRow: 6, file: 'main_v2.zip', dateAdded: DateTime.utc(2026, 4));
+
+    UpdateCheck check(List<GbFile> files) => checkForUpdate(
+          origin: origin(
+            modId: pageId,
+            fileId: 1,
+            dismissedUntil: passedOver.dateAdded,
+            patches: [
+              // Written with the files listed above the pick passed over, as every write of a layer is.
+              patchFixture(
+                modId: pageId,
+                modIdConfidence: OriginConfidence.exact,
+                fileId: picked.idRow,
+                versionConfidence: OriginConfidence.exact,
+                updatesDismissedUntil: passedOver.dateAdded,
+              ),
+            ],
+          ),
+          remote: GbMod(idRow: pageId, files: files),
+        );
+
+    UpdateCheck base(UpdateCheck folded) =>
+        folded.layers.firstWhere((l) => l.key == const DownloadKey.base(pageId)).check;
+
+    test('neither the placed file nor the others the check listed are offered again', () {
+      final folded = check([main, picked, passedOver]);
+      expect(base(folded).hasUpdate, isFalse);
+      expect(folded.hasUpdate, isFalse, reason: 'the row does not offer the update the user just answered');
+    });
+
+    test('a base file published after the dismissal is offered, and the placed file is not', () {
+      final later = GbFile(idRow: 7, file: 'main_v3.zip', dateAdded: DateTime.utc(2026, 5));
+      final verdict = base(check([main, picked, passedOver, later]));
+      expect(verdict.hasUpdate, isTrue, reason: 'the dismissal silences only what was listed when it was written');
+      expect(verdict.newerFiles.map((f) => f.idRow), isNot(contains(picked.idRow)),
+          reason: 'a file another layer of the folder records is installed');
+      expect(verdict.newerFiles.map((f) => f.idRow), contains(later.idRow));
+    });
+  });
+
   group('a base and a patch from one page', () {
     // A lone fix file on the main file's own page, the shape about one in
     // twelve of the most-downloaded character pages carries. The page is

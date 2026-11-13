@@ -20,7 +20,7 @@ import '../../services/log/logger.dart';
 import '../../services/platform_service.dart';
 import '../../services/platform_service_factory.dart';
 import '../../services/shader_fixes/shader_fixes_service.dart';
-import '../../services/update_apply/update_run_stages.dart' show UpdateRunKept;
+import '../../services/update_apply/update_run_stages.dart' show UpdateKeptOf, skipUpdateQuestion;
 import '../../services/update_check.dart';
 import '../../utils/byte_format.dart';
 import '../../utils/categories.dart';
@@ -469,6 +469,11 @@ class _DownloadRow extends ConsumerWidget {
             iconButton(Icons.close_rounded, loc.t('downloads.cancel'), () => queue.cancel(job.seq)),
           DownloadRowAction.removeFromQueue =>
             iconButton(Icons.close_rounded, loc.t('downloads.remove_from_queue'), () => queue.cancel(job.seq)),
+          DownloadRowAction.updateAnyway => OutlinedButton(
+              style: smallButtonStyle(context),
+              onPressed: () => questions.updateAnyway(job.seq),
+              child: Text(loc.t('downloads.update.update_anyway')),
+            ),
           DownloadRowAction.answer => OutlinedButton(
               style: smallButtonStyle(context),
               onPressed: () => questions.answer(job.seq),
@@ -481,7 +486,7 @@ class _DownloadRow extends ConsumerWidget {
             ),
           DownloadRowAction.skipUpdate => TextButton(
               style: smallButtonStyle(context),
-              onPressed: () => queue.skipUpdate(job.seq),
+              onPressed: () => skipUpdateQuestion(ProviderScope.containerOf(context, listen: false), job),
               child: Text(loc.t('downloads.update.skip')),
             ),
           DownloadRowAction.openModPage => TextButton(
@@ -512,7 +517,7 @@ class _DownloadRow extends ConsumerWidget {
     switch (job.state) {
       case DownloadJobState.waiting:
       case DownloadJobState.failed when failedUpdate:
-        final kept = job.prepared is UpdateRunKept ? job.prepared! as UpdateRunKept : null;
+        final kept = job.updateKept;
         final String line;
         if (failedUpdate) {
           line = updateFailureText(loc, job.error, keptIn: job.archive?.parent.path);
@@ -837,9 +842,12 @@ IconData _updateQuestionIcon(UpdateQuestionKind? question) => switch (question) 
       UpdateQuestionKind.password || null => Icons.lock_outline_rounded,
     };
 
-/// The answer button of an update question the app asks itself (`updateQuestionAnswerable`).
-String _updateAnswerKey(UpdateQuestionKind? question) =>
-    question == UpdateQuestionKind.folders ? 'downloads.answer_several_folders' : 'downloads.answer_password';
+/// The answer button of an update question, which opens its window. An unrecorded patch's is Update anyway instead.
+String _updateAnswerKey(UpdateQuestionKind? question) => switch (question) {
+      UpdateQuestionKind.folders => 'downloads.update.answer_folders',
+      UpdateQuestionKind.patchShaped => 'downloads.answer_patch',
+      _ => 'downloads.answer_password',
+    };
 
 /// An update row's head: its name with what it is doing at the right, the file, and for a shared archive how many
 /// mods it updates.
@@ -1046,10 +1054,8 @@ String _finishedLine(AppLocalizations loc, DownloadJob job, _RowCallbacks action
         loc,
         job.skipReason,
         stillOn: actions.heldFileDate(job),
-        alongWith: switch (job.resultFor(job.update?.primary.modId ?? '')?.alongWith) {
-          final id? => actions.mod(id)?.name ?? id,
-          null => null,
-        },
+        result: job.resultFor(job.update?.primary.modId ?? ''),
+        nameOf: (id) => actions.mod(id)?.name ?? id,
       ),
     JobOutcome.undone => loc.t('downloads.update.undone'),
     JobOutcome.nothingInstalled || null => job.headline ?? loc.t('downloads.done'),

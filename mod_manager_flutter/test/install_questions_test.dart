@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gamebanana.dart';
+import 'package:mod_manager_flutter/screens/dialogs/folders_modal.dart';
 import 'package:mod_manager_flutter/screens/dialogs/import_selection_dialog.dart';
 import 'package:mod_manager_flutter/screens/dialogs/install_archive_flow.dart';
 import 'package:mod_manager_flutter/screens/dialogs/patch_install_prompt.dart';
@@ -233,11 +234,35 @@ void main() {
       overrides: temp.overrides,
     );
     await tapWithIo(tester, find.text('answer'));
-    expect(find.byType(AlertDialog), findsOneWidget, reason: 'the folder picker, asked from the press');
-    await tapWithIo(tester, find.text('Cancel'));
+    expect(find.byType(FoldersModal), findsOneWidget, reason: 'the folder picker, asked from the press');
+    await tapWithIo(tester, find.byTooltip('Close'));
 
     expect(answer, isA<AnswerKept>());
     expect((answer as AnswerKept).wait.question, InstallQuestion.severalFolders);
     expect(waits.prepared.folders.every((f) => Directory(f).existsSync()), isTrue);
+  });
+
+  testWidgets("the folder picker's Don't install ends the download", (tester) async {
+    await mount(tester);
+    final archive = zipOf(File(p.join(downloads.path, 'Pack.zip')), {'A/a.ini': modIni, 'B/b.ini': modIni});
+    final waits = await run(tester, jobFor(archive)) as InstallWaits;
+
+    InstallAnswer? answer;
+    await pumpLocalized(
+      tester,
+      Consumer(
+        builder: (c, r, _) => TextButton(
+          onPressed: () async =>
+              answer = await answerInstallQuestion(c, r, jobFor(archive, prepared: waits.prepared, wait: waits.wait)),
+          child: const Text('answer'),
+        ),
+      ),
+      overrides: temp.overrides,
+    );
+    await tapWithIo(tester, find.text('answer'));
+    expect(find.text('Pick what to install'), findsOneWidget);
+    await tapWithIo(tester, find.text("Don't install"));
+
+    expect(answer, isA<AnswerDeclined>());
   });
 }

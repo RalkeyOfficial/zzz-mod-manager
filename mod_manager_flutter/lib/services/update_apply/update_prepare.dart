@@ -27,7 +27,6 @@ import '../log/logger.dart';
 import '../mod_manager_service.dart';
 import '../patch_detection.dart';
 import '../patch_placement.dart';
-import '../shader_fixes/shader_fixes_service.dart';
 import 'mod_activation_port.dart';
 import 'sibling_group.dart';
 import 'update_applier.dart';
@@ -149,15 +148,12 @@ final class UnrecordedPatchQuestion extends UpdateQuestion {
 
 /// One folder of the archive, offered to a [FoldersQuestion]'s answer.
 class UpdateFolderChoice {
-  const UpdateFolderChoice({required this.path, required this.name, required this.looksLikeMod});
+  const UpdateFolderChoice({required this.path, required this.name});
 
   /// Absolute path of the unpacked folder.
   final String path;
 
   final String name;
-
-  /// Whether the folder holds a `.ini`, or shader files an import would turn into a mod: the hint that it is not just previews.
-  final bool looksLikeMod;
 }
 
 /// What an unpack left behind, which the caller owns until it deletes it.
@@ -378,15 +374,7 @@ Future<UpdatePrepareResult> prepareUpdate(
     preview = await previewWith(request.mod.origin?.ingest);
     final problem = preview.layout.problem;
     if (problem == UpdateLayoutProblem.layoutUnknown || problem == UpdateLayoutProblem.layoutChanged) {
-      final choices = [
-        for (final folder in folders)
-          UpdateFolderChoice(
-            path: folder,
-            name: path.basename(folder),
-            looksLikeMod: await ArchiveService.containsIniFile(folder) ||
-                await ShaderFixesService.shaderPartOf(folder) != null,
-          ),
-      ];
+      final choices = [for (final folder in folders) UpdateFolderChoice(path: folder, name: path.basename(folder))];
       return UpdateAsks(FoldersQuestion(problem: problem!, choices: choices, unpacked: unpack));
     }
   }

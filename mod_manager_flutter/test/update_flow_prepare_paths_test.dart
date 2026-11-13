@@ -10,6 +10,7 @@ import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
+import 'package:mod_manager_flutter/screens/components/question_parts.dart';
 import 'package:mod_manager_flutter/screens/dialogs/apply_update_flow.dart';
 import 'package:mod_manager_flutter/services/download/download_job.dart';
 import 'package:mod_manager_flutter/services/download/download_queue.dart';
@@ -244,7 +245,8 @@ void main() {
   group('the archive has two folders and the mod records none', () {
     Map<String, String> twoFolders() => {'Ellen/Ellen.ini': ini, 'Ellen previews/preview.png': 'png'};
 
-    testWidgets('the picker pre-ticks the folder named like the mod, and the pick is the layout that is written', (tester) async {
+    testWidgets('the picker ticks nothing, names the folder like the mod as a hint, and the pick is the layout that is written',
+        (tester) async {
       final mod = await installed(tester);
       final file = serve(2, twoFolders());
 
@@ -252,13 +254,22 @@ void main() {
         tester,
         (context, ref) => applyUpdateFlow(context, ref, mod: mod, remoteModId: 100, file: file, confirm: false),
       );
-      await pumpUntil(tester, () => find.text('Which folders are Ellen?').evaluate().isNotEmpty, reason: 'no folders question');
-      bool ticked(String folder) => tester.widget<CheckboxListTile>(find.widgetWithText(CheckboxListTile, folder)).value!;
-      expect(ticked('Ellen'), isTrue);
+      await pumpUntil(tester, () => find.text('Pick what to install').evaluate().isNotEmpty, reason: 'no folders question');
+      bool ticked(String folder) => tester
+          .widget<ChoiceCheck>(find.descendant(of: find.widgetWithText(InkWell, '$folder/'), matching: find.byType(ChoiceCheck)))
+          .ticked;
+      expect(ticked('Ellen'), isFalse, reason: 'a guess never ticks');
       expect(ticked('Ellen previews'), isFalse);
+      expect(find.text('Same name as your folder'), findsOneWidget);
+      expect(find.text('Looks like preview images'), findsOneWidget);
+      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Update Ellen')).onPressed, isNull);
       expect(unpacksLeft(), hasLength(1), reason: 'one unpack is waiting on the answer');
 
-      await press(tester, find.widgetWithText(FilledButton, 'Update'));
+      expect(find.text('Ellen/'), findsNWidgets(2), reason: 'what the mod has now, and the folder of the archive');
+      await tester.tap(find.text('Ellen/').last);
+      await tester.pump();
+      expect(ticked('Ellen'), isTrue);
+      await press(tester, find.widgetWithText(FilledButton, 'Update Ellen'));
       await closeResult(tester);
 
       expect(outcome, UpdateFlowOutcome.written);
@@ -268,7 +279,28 @@ void main() {
       expect(unpacksLeft(), isEmpty, reason: 'the answer did not unpack again, so one unpack was cleaned up');
     });
 
-    testWidgets('a pick the second preview follows is the pick, not the pre-ticked folder', (tester) async {
+    testWidgets('the window names the file as it was asked for, not as a name collision saved it', (tester) async {
+      final mod = await installed(tester);
+      await tester.runAsync(() async {
+        final downloads = Directory(p.join(temp.root.path, 'downloads'))..createSync(recursive: true);
+        File(p.join(downloads.path, 'ellen2.zip')).writeAsStringSync('an older download of the same name');
+      });
+      final file = serve(2, twoFolders());
+
+      await start(
+        tester,
+        (context, ref) => applyUpdateFlow(context, ref, mod: mod, remoteModId: 100, file: file, confirm: false),
+      );
+      await pumpUntil(tester, () => find.text('Pick what to install').evaluate().isNotEmpty, reason: 'no folders question');
+      expect(archivesLeft().where((name) => name != 'ellen2.zip'), isNotEmpty, reason: 'the download was saved under another name');
+      expect(find.textContaining('ellen2.zip', findRichText: true), findsOneWidget);
+      expect(find.textContaining('(1)', findRichText: true), findsNothing);
+
+      await press(tester, find.text('Skip this update'));
+      await pumpUntil(tester, ended);
+    });
+
+    testWidgets('a pick the second preview follows is the pick, not the folder named like the mod', (tester) async {
       final mod = await installed(tester);
       final file = serve(2, {'Ellen/Ellen.ini': '[Other]\n', 'Ellen alt/Ellen.ini': ini});
 
@@ -276,11 +308,10 @@ void main() {
         tester,
         (context, ref) => applyUpdateFlow(context, ref, mod: mod, remoteModId: 100, file: file, confirm: false),
       );
-      await pumpUntil(tester, () => find.text('Which folders are Ellen?').evaluate().isNotEmpty, reason: 'no folders question');
-      await tester.tap(find.widgetWithText(CheckboxListTile, 'Ellen'));
-      await tester.tap(find.widgetWithText(CheckboxListTile, 'Ellen alt'));
+      await pumpUntil(tester, () => find.text('Pick what to install').evaluate().isNotEmpty, reason: 'no folders question');
+      await tester.tap(find.text('Ellen alt/'));
       await tester.pump();
-      await press(tester, find.widgetWithText(FilledButton, 'Update'));
+      await press(tester, find.widgetWithText(FilledButton, 'Update Ellen'));
       await closeResult(tester);
 
       expect(outcome, UpdateFlowOutcome.written);
@@ -297,10 +328,10 @@ void main() {
         tester,
         (context, ref) => applyUpdateFlow(context, ref, mod: mod, remoteModId: 100, file: file, confirm: false),
       );
-      await pumpUntil(tester, () => find.text('Which folders are Ellen?').evaluate().isNotEmpty, reason: 'no folders question');
+      await pumpUntil(tester, () => find.text('Pick what to install').evaluate().isNotEmpty, reason: 'no folders question');
       expect(archivesLeft(), isNotEmpty);
 
-      await press(tester, find.text('Cancel'));
+      await press(tester, find.text('Skip this update'));
       await pumpUntil(tester, ended);
 
       expect(outcome, UpdateFlowOutcome.declined);

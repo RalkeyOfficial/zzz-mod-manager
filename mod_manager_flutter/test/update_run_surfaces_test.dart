@@ -84,8 +84,8 @@ void main() {
       problem: UpdateLayoutProblem.layoutUnknown,
       unpacked: unpack,
       choices: [
-        UpdateFolderChoice(path: '/tmp/a/One', name: 'One', looksLikeMod: true),
-        UpdateFolderChoice(path: '/tmp/a/Two', name: 'Two', looksLikeMod: true),
+        UpdateFolderChoice(path: '/tmp/a/One', name: 'One'),
+        UpdateFolderChoice(path: '/tmp/a/Two', name: 'Two'),
       ],
     ),
   );
@@ -127,7 +127,7 @@ void main() {
       expect(find.text('Each update keeps the file it replaces as a snapshot.'), findsOneWidget);
 
       expect(find.text('This update has 2 folders. Pick the ones that replace the mod.'), findsOneWidget);
-      expect(find.widgetWithText(OutlinedButton, 'Pick folders…'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Pick folder…'), findsOneWidget);
       expect(find.widgetWithText(TextButton, 'Skip update'), findsOneWidget);
       expect(find.text('Not enough space — 2.0 MB needed, 1.0 MB free. Nothing was changed.'), findsOneWidget);
       expect(find.widgetWithText(TextButton, 'Remove from the list'), findsOneWidget);
@@ -146,6 +146,42 @@ void main() {
       expect(find.text('80.0 MB · 1 ahead of it'), findsOneWidget);
       final dimmed = t.widget<Opacity>(find.ancestor(of: find.text('mod 5'), matching: find.byType(Opacity)).first);
       expect(dimmed.opacity, 0.75);
+    });
+
+    testWidgets("each question's row says it, with its own answer button and Skip update", (t) async {
+      final container = seeded([
+        asking(1, const UpdateWait(UpdateQuestionKind.patchShaped, modId: 'mod1')),
+        asking(2, const UpdateWait(UpdateQuestionKind.unrecordedPatch, modId: 'mod2')),
+      ]);
+      await pumpPanel(t, container);
+
+      expect(find.text('This update looks like a patch. Choose what it should do.'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Choose…'), findsOneWidget);
+      expect(
+        find.text('This folder holds a patch as well, and nothing records which files came from it. '
+            'Updating removes the patch from the folder, and the saved copy keeps it.'),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(OutlinedButton, 'Update anyway'), findsOneWidget,
+          reason: 'an unrecorded patch is answered on the row itself');
+      expect(find.widgetWithText(TextButton, 'Skip update'), findsNWidgets(2));
+    });
+
+    testWidgets("Skip update on a sibling's question skips that mod alone and sends the job back in line", (t) async {
+      const kept = UpdateRunKept(unpacked: unpack);
+      final container = seeded([
+        updateJob(1, state: DownloadJobState.waiting, mods: [baseOf('mod1', 1), baseOf('Shrine', 1)])
+            .copyWith(prepared: kept)
+            .withUpdateWait(const UpdateWait(UpdateQuestionKind.unrecordedPatch, modId: 'Shrine')),
+      ]);
+      await pumpPanel(t, container);
+
+      await t.tap(find.widgetWithText(TextButton, 'Skip update'));
+      await t.pump();
+      final job = container.read(downloadQueueProvider).single;
+      expect(job.state, DownloadJobState.downloaded, reason: 'the job goes on with the other mod');
+      expect((job.prepared! as UpdateRunKept).answers['Shrine'], isA<SkipThisMod>());
+      expect(job.outcome, isNull);
     });
 
     testWidgets('the first in line downloads next, and with every place taken by questions it waits for the answers',
@@ -280,6 +316,67 @@ void main() {
           matching: finder,
         );
 
+    testWidgets('a patch put on top reads "Patch added"; one put into another mod is a skip that names that mod',
+        (t) async {
+      await pumpUpdates(
+        t,
+        [
+          updateJob(1, state: DownloadJobState.done).copyWith(
+            outcome: JobOutcome.patchAdded,
+            modResults: [UpdateModResult.written(baseOf('mod1', 1), patchedInto: 'mod1')],
+          ),
+          updateJob(2, state: DownloadJobState.done).copyWith(
+            outcome: JobOutcome.skipped,
+            skipReason: UpdateSkipReason.patchAddedElsewhere,
+            modResults: [
+              UpdateModResult.skipped(baseOf('mod2', 2), UpdateSkipReason.patchAddedElsewhere, patchedInto: 'mod3'),
+            ],
+          ),
+        ],
+        {'mod1': check(1), 'mod2': check(2)},
+        mods: ['mod1', 'mod2', 'mod3'],
+      );
+
+      expect(inRow('mod1', find.text('Patch added')), findsOneWidget);
+      expect(inRow('mod2', find.text('Skipped · patch added to mod3')), findsOneWidget);
+      expect(inRow('mod2', find.text('Update')), findsOneWidget, reason: 'it keeps its update, as a skip does');
+    });
+
+    testWidgets('a mod skipped at its question reads skipped at once, with Update and Ignore, while its job goes on',
+        (t) async {
+      await pumpUpdates(
+        t,
+        [
+          updateJob(1, state: DownloadJobState.downloaded, mods: [baseOf('mod1', 1), baseOf('mod2', 1)]).copyWith(
+            modResults: [UpdateModResult.skipped(baseOf('mod2', 1), UpdateSkipReason.ignoredMeanwhile)],
+          ),
+        ],
+        {'mod1': check(1), 'mod2': check(1)},
+        mods: ['mod1', 'mod2'],
+      );
+
+      expect(inRow('mod2', find.text('Skipped · ignored meanwhile')), findsOneWidget);
+      expect(inRow('mod2', find.text('Update')), findsOneWidget);
+      expect(inRow('mod2', find.text('Ignore')), findsOneWidget);
+      expect(inRow('mod1', find.text('Update')), findsNothing, reason: "the job's other mod is still in the run");
+    });
+
+    testWidgets("a question about one mod of a job is asked on that mod's row only", (t) async {
+      await pumpUpdates(
+        t,
+        [
+          updateJob(1, state: DownloadJobState.waiting, mods: [baseOf('mod1', 1), baseOf('mod2', 1)])
+              .withUpdateWait(const UpdateWait(UpdateQuestionKind.unrecordedPatch, modId: 'mod2')),
+        ],
+        {'mod1': check(1), 'mod2': check(1)},
+        mods: ['mod1', 'mod2'],
+      );
+
+      expect(inRow('mod2', find.text('Answer')), findsOneWidget);
+      expect(inRow('mod1', find.text('Answer')), findsNothing);
+      expect(inRow('mod1', find.text('Waiting to update')), findsOneWidget);
+    });
+
     testWidgets('a mod in a run shows its phase in place of Update and Ignore, one not in a run keeps them',
         (t) async {
       await pumpUpdates(
@@ -311,7 +408,8 @@ void main() {
       expect(inRow('mod3', find.text('Installing · linking it in')), findsOneWidget);
       expect(t.widget<ProgressTrack>(inRow('mod3', find.byType(ProgressTrack))).value, isNull, reason: 'a sweep');
       expect(inRow('mod4', find.text('Checking what is in the file')), findsOneWidget);
-      expect(inRow('mod5', find.text('Skip update')), findsOneWidget, reason: 'a question the app cannot ask yet');
+      expect(inRow('mod5', find.text('Answer')), findsOneWidget, reason: 'every question has its window');
+      expect(inRow('mod5', find.text('Skip update')), findsNothing);
       expect(inRow('mod6', find.text('Waiting to update')), findsOneWidget);
 
       expect(inRow('mod7', find.text('Update')), findsOneWidget);

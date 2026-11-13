@@ -58,10 +58,14 @@ final class UpdateAsking extends UpdatePhase {
   const UpdateAsking();
 }
 
-/// [job]'s phase, or null once it has ended. The write's step is [modId]'s own, or any mod's when null.
+/// [job]'s phase, or null once it has ended, and for [modId] once that mod has a result of its own, a skip at its question while the job goes on.
+/// The write's step is [modId]'s own, or any mod's when null.
 /// A transfer or an unpack under way when the run halts goes on to the next gate, so only a job at a gate reads stopped.
+/// A question about another mod of the job than [modId] leaves [modId] waiting in line, since only that mod's row asks it.
 UpdatePhase? updatePhaseOf(DownloadJob job, [String? modId]) => switch (job.state) {
       DownloadJobState.done || DownloadJobState.failed => null,
+      _ when modId != null && job.resultFor(modId) != null => null,
+      DownloadJobState.waiting when modId != null && (job.updateWait?.modId ?? modId) != modId => const UpdateInLine(),
       DownloadJobState.waiting => const UpdateAsking(),
       DownloadJobState.running => updateIsConnecting(job) ? const UpdateConnecting() : const UpdateDownloading(),
       DownloadJobState.updating when job.updateStep == UpdateStep.writing => UpdateInstalling(writingStepOf(job, modId)),
@@ -206,9 +210,18 @@ String downloadFailureText(AppLocalizations loc, Object? error) => switch (error
       _ => loc.t('downloads.failed'),
     };
 
-/// Why an update, or one mod of it, was skipped. [stillOn] is the date of the file the mod still holds, said for a
-/// skip the user chose. [alongWith] names the mod whose update wrote this one, for [UpdateSkipReason.alreadyUpdated].
-String updateSkipText(AppLocalizations loc, UpdateSkipReason? reason, {DateTime? stillOn, String? alongWith}) {
+/// Why an update, or one mod of it, was skipped. [stillOn] is the date of the file the mod still holds, said for a skip the user chose.
+/// [result] is the mod's own, which names, through [nameOf], the mod whose update wrote this one ([UpdateSkipReason.alreadyUpdated])
+/// or the mod the file went into as a patch ([UpdateSkipReason.patchAddedElsewhere]).
+String updateSkipText(
+  AppLocalizations loc,
+  UpdateSkipReason? reason, {
+  DateTime? stillOn,
+  UpdateModResult? result,
+  required String Function(String modId) nameOf,
+}) {
+  final alongWith = switch (result?.alongWith) { final id? => nameOf(id), null => null };
+  final patchedInto = switch (result?.patchedInto) { final id? => nameOf(id), null => null };
   final why = switch (reason) {
     UpdateSkipReason.skippedByUser || null =>
       stillOn == null ? null : loc.t('downloads.update.reason.still_on', params: {'date': formatResolveDate(stillOn)}),
@@ -220,6 +233,9 @@ String updateSkipText(AppLocalizations loc, UpdateSkipReason? reason, {DateTime?
     UpdateSkipReason.alreadyUpdated => alongWith == null
         ? loc.t('downloads.update.reason.already_updated')
         : loc.t('downloads.update.reason.updated_along_with', params: {'mod': alongWith}),
+    UpdateSkipReason.patchAddedElsewhere => patchedInto == null
+        ? loc.t('downloads.update.reason.patch_elsewhere_unnamed')
+        : loc.t('downloads.update.reason.patch_elsewhere', params: {'mod': patchedInto}),
   };
   return why == null
       ? loc.t('downloads.update.skipped')

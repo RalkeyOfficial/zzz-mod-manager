@@ -394,6 +394,9 @@ enum DownloadRowAction {
   /// End a waiting update: nothing is written, what it kept is deleted, and the row stays as skipped.
   skipUpdate,
 
+  /// Update anyway, the answer to an update whose folder holds a patch nothing records, given on the row itself.
+  updateAnyway,
+
   /// Open the download's mod page in Browse, where the author usually puts an archive's password.
   openModPage,
 
@@ -442,7 +445,9 @@ List<DownloadRowAction> rowActions(
       DownloadJobState.paused => const [DownloadRowAction.resume, DownloadRowAction.cancel],
       DownloadJobState.downloaded => const [DownloadRowAction.cancel],
       DownloadJobState.waiting when job.isUpdate => [
-          if (updateQuestionAnswerable(job.updateWait?.question)) DownloadRowAction.answer,
+          job.updateWait?.question == UpdateQuestionKind.unrecordedPatch
+              ? DownloadRowAction.updateAnyway
+              : DownloadRowAction.answer,
           DownloadRowAction.skipUpdate,
         ],
       // A failed update is only taken off the list: no Try again is offered on it.
@@ -461,11 +466,6 @@ List<DownloadRowAction> rowActions(
           ? const [DownloadRowAction.dismiss]
           : const [DownloadRowAction.retry],
     };
-
-/// Whether the app can ask an update's [question] itself: the archive's password and which of its folders is the mod.
-/// The rest wait with only Skip, and a patch-shaped file is never written by the update's wipe.
-bool updateQuestionAnswerable(UpdateQuestionKind? question) =>
-    question == UpdateQuestionKind.password || question == UpdateQuestionKind.folders;
 
 List<DownloadRowAction> _finishedActions(
   DownloadJob job,
@@ -543,7 +543,7 @@ class ModUpdateState {
 
   final DownloadJob job;
 
-  /// Null while the job has not ended.
+  /// Null while the job has not ended, unless this mod was skipped at its question while the job goes on.
   /// A job writes some of its mods and not others, so the job's own outcome is not this mod's.
   final UpdateModResult? result;
 
@@ -563,7 +563,7 @@ ModUpdateState? updateJobOfMod(List<DownloadJob> jobs, String modId) {
   DownloadJob? ended;
   for (final job in jobs.reversed) {
     if (!job.isUpdate || !job.update!.folders.contains(modId)) continue;
-    if (!job.isTerminal) return ModUpdateState(job, null);
+    if (!job.isTerminal) return ModUpdateState(job, job.resultFor(modId));
     ended ??= job;
   }
   return ended == null ? null : ModUpdateState(ended, ended.resultFor(modId));

@@ -179,8 +179,11 @@ void main() {
       }
 
       // Two folders: which of them to install, as separate mods.
-      await waitFor(find.text('Install (2)'));
-      await tester.tap(find.text('Install (2)'));
+      await waitFor(find.text('Pick what to install'));
+      await tester.tap(find.text('${p.basename(update.path)}/'));
+      await tester.tap(find.text('${p.basename(fresh.path)}/'));
+      await tester.pump();
+      await tester.tap(find.text('Install 2 mods'));
       await tester.pump();
       final confirm = find.byKey(const ValueKey('import_confirm'));
       await waitFor(confirm);
