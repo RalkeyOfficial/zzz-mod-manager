@@ -196,8 +196,11 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
     void failed() => saving.update(kind: NotificationKind.error, title: failedTitle, characterId: mod.characterId);
     var ok = false;
     try {
-      // Writes the in-folder sidecar (rename-safe) and mirrors to config.json.
-      final moved = await ApiService.setModCharacter(mod.id, groupId == unknownCharacterId ? '' : groupId);
+      final moved = await retagMod(
+        ProviderScope.containerOf(context, listen: false),
+        mod.id,
+        groupId == unknownCharacterId ? '' : groupId,
+      );
       if (moved) {
         ok = true;
       } else {

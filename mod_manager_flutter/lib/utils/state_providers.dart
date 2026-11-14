@@ -1296,11 +1296,10 @@ final modBackupsProvider = FutureProvider<Set<String>>((ref) async {
   return ref.read(snapshotServiceProvider).uidsWithSnapshots();
 });
 
-/// The mods, by folder id, whose folders an update, a reinstall, a patch installed or taken out, or a restore is
-/// changing right now, or whose tracking a write is changing: an Ignore, a marking or its Undo, the tracking screen.
-/// The History tab of the mod's page holds its buttons while its mod is here: nothing else on
-/// screen shows the write is running, and a second write into the same folder would snapshot it half done. A switch
-/// press on the mod waits for it ([LibraryToggles]).
+/// The mods, by folder id, whose folders an update, a reinstall, a patch installed or taken out, or a restore is changing right now,
+/// or whose sidecar a write is changing: an Ignore, a marking or its Undo, the tracking screen, a character change by dropping its card on a row.
+/// The History tab of the mod's page holds its buttons while its mod is here: nothing else on screen shows the write is running,
+/// and a second write into the same folder would snapshot it half done. A switch press on the mod waits for it ([LibraryToggles]).
 final modWritesInProgressProvider = StateProvider<Set<String>>((ref) => const {});
 
 /// How many writes are running on each mod in [modWritesInProgressProvider], so a mod stays there until its last one
@@ -1338,6 +1337,31 @@ Future<T> whileWritingMod<T>(ProviderContainer container, String modId, Future<T
       }
     });
 
+/// How many writes [whileWritingMod] is running on [modId] now.
+int modWritesRunning(ProviderContainer container, String modId) => container.read(_modWriteCountsProvider)[modId] ?? 0;
+
+/// [whileWritingMod], with [modId]'s write counter ([modWritesStartedProvider]) as this write started, its own count included,
+/// or null when another write was running on the folder then: what an update run's Undo compares the counter against later.
+Future<(T, int?)> whileWritingModCounted<T>(ProviderContainer container, String modId, Future<T> Function() write) =>
+    whileWritingMod(container, modId, () async {
+      final started = modWritesRunning(container, modId) == 1 ? container.read(modWritesStartedProvider)[modId] : null;
+      return (await write(), started);
+    });
+
+/// Files [modId] under the character or category [characterId] (empty for none) in its sidecar, mirrored to `config.json`,
+/// as dropping its card on a row of the character list does. Marked as a write of the folder, since the sidecar is in it.
+Future<bool> retagMod(ProviderContainer container, String modId, String characterId) => whileWritingMod(
+      container,
+      modId,
+      () async => (await container.read(modManagerServiceProvider.future)).setModCharacter(modId, characterId),
+    );
+
+/// Settings' Automatic tagging: tags every untagged mod whose folder name names a character, each folder's write marked as [retagMod] marks it.
+/// Answers `folder name → character id` for each one it tagged.
+Future<Map<String, String>> autoTagLibrary(ProviderContainer container) async =>
+    (await container.read(modManagerServiceProvider.future))
+        .autoTagAllMods(tag: (modId, characterId) => retagMod(container, modId, characterId));
+
 /// The mods One at a time turned off while their folders were being written. The write leaves such a mod off when it
 /// ends rather than turning it back on, which would also place its shader files again (`docs/applying-updates.md`).
 final _turnedOffDuringWriteProvider = StateProvider<Set<String>>((ref) => const {});
@@ -1373,6 +1397,13 @@ final modSnapshotsProvider = FutureProvider.autoDispose.family<List<SnapshotEntr
         origin: (await sidecars.read(p.join(snapshot.directory.path, 'files')))?.origin,
       ),
   ];
+});
+
+/// A mod's snapshots by uid, newest first, read from their manifests alone: what an update run's Undo checks before it is offered.
+/// Rebuilt with [modBackupsProvider], as [modSnapshotsProvider] is.
+final modSnapshotListProvider = FutureProvider.autoDispose.family<List<ModSnapshot>, String>((ref, uid) {
+  ref.watch(modBackupsProvider);
+  return ref.read(snapshotServiceProvider).list(uid);
 });
 
 /// Asks GitHub whether the app has a newer release. Overridden in tests with one that has no network.

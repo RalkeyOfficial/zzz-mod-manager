@@ -476,10 +476,45 @@ void main() {
       final seeded = seed([updateJob(1, state: DownloadJobState.updating, step: UpdateStep.writing)]);
       seeded.settleUpdate(1, const UpdateStageWritten(JobOutcome.updated));
       expect(jobOf(1).installed, ['mod1']);
-      seeded.markUndone(1);
+      seeded.markUndone(1, 'mod1');
+      expect(jobOf(1).resultFor('mod1')!.undone, isTrue);
       expect(jobOf(1).outcome, JobOutcome.undone);
       seeded.clearFinished();
       expect(gone(1), isTrue);
+    });
+
+    test('a job of several mods is undone one folder at a time, and is undone once every write is', () {
+      final seeded = seed([
+        updateJob(1, state: DownloadJobState.updating, step: UpdateStep.writing, mods: [baseOf('Ellen', 1), baseOf('Miyabi', 1)]),
+      ]);
+      seeded.settleUpdate(1, const UpdateStageWritten(JobOutcome.updated));
+
+      seeded.markUndoFailed(1, 'Ellen', UpdateUndoProblem.snapshotGone);
+      expect(jobOf(1).resultFor('Ellen')!.undoProblem, UpdateUndoProblem.snapshotGone);
+      expect(jobOf(1).resultFor('Ellen')!.undone, isFalse);
+
+      seeded.markUndone(1, 'Ellen');
+      expect(jobOf(1).resultFor('Ellen')!.undone, isTrue);
+      expect(jobOf(1).resultFor('Ellen')!.undoProblem, isNull, reason: 'a press that worked clears the last one\'s reason');
+      expect(jobOf(1).resultFor('Miyabi')!.undone, isFalse, reason: 'each folder has its own Undo');
+      expect(jobOf(1).outcome, JobOutcome.updated, reason: 'Miyabi is still updated');
+
+      seeded.markUndone(1, 'Miyabi');
+      expect(jobOf(1).outcome, JobOutcome.undone);
+    });
+
+    test('a failed job whose written mod is undone stays failed', () {
+      final seeded = seed([
+        updateJob(1, state: DownloadJobState.updating, step: UpdateStep.writing, mods: [baseOf('Ellen', 1), baseOf('Miyabi', 1)]),
+      ]);
+      const failure = UpdateFailure(UpdateFailureKind.refused);
+      seeded.settleUpdate(
+        1,
+        UpdateStageFailed(failure, results: [UpdateModResult.written(baseOf('Ellen', 1))]),
+      );
+      seeded.markUndone(1, 'Ellen');
+      expect(jobOf(1).state, DownloadJobState.failed);
+      expect(jobOf(1).resultFor('Ellen')!.undone, isTrue);
     });
 
     test("the Updates page's Clear finished takes only the run's finished rows", () {

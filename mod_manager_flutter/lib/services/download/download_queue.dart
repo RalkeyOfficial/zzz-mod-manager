@@ -558,7 +558,7 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
           filedUnder: job.characterId,
         );
         _replace(seq, (j) => j.copyWith(report: report, modResults: all));
-      case UpdateStageSkipped(:final reason, :final results):
+      case UpdateStageSkipped(:final reason, :final results, :final report):
         final all = _modResults(
           job,
           results,
@@ -566,7 +566,7 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
         );
         _end(job, keepArchive: false);
         markDone(seq, outcome: JobOutcome.skipped);
-        _replace(seq, (j) => j.copyWith(skipReason: all.first.skipReason ?? reason, modResults: all));
+        _replace(seq, (j) => j.copyWith(skipReason: all.first.skipReason ?? reason, modResults: all, report: report));
       case UpdateStageFailed(:final failure, :final results, :final report):
         final all = _modResults(job, results, (mod, _) => UpdateModResult(mod, UpdateModEnd.failed, failure: failure));
         _end(job, keepArchive: failure.kind == UpdateFailureKind.unpackFailed);
@@ -656,11 +656,25 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
     return _decline(seq, updateSkip: reason, updateResults: results);
   }
 
-  /// An update job's write was undone. The row stays, as [JobOutcome.undone].
-  void markUndone(int seq) {
+  /// Undo took back what the update job [seq] wrote for its mod in the folder [modId] (`docs/update-runs.md` §8).
+  /// The row stays. A finished job whose every write is undone is [JobOutcome.undone]; a failed one stays failed.
+  void markUndone(int seq, String modId) {
     final job = _jobOf(seq);
-    if (job == null || !job.isUpdate || job.state != DownloadJobState.done) return;
-    _replace(seq, (j) => j.copyWith(outcome: JobOutcome.undone));
+    final result = job?.resultFor(modId);
+    if (job == null || !job.isUpdate || !job.isTerminal || result == null) return;
+    final all = [for (final r in job.modResults) r.mod.modId == modId ? r.withUndo(undone: true) : r];
+    final everyWrite = all.where((r) => r.hasWrite);
+    final allUndone = job.state == DownloadJobState.done && everyWrite.every((r) => r.undone);
+    _replace(seq, (j) => j.copyWith(modResults: all, outcome: allUndone ? JobOutcome.undone : null));
+  }
+
+  /// A press of Undo on the mod in the folder [modId] of the update job [seq] did nothing, for [problem]. Its row says "Couldn't undo".
+  void markUndoFailed(int seq, String modId, UpdateUndoProblem problem) {
+    final job = _jobOf(seq);
+    if (job == null || !job.isUpdate || job.resultFor(modId) == null) return;
+    _replace(seq, (j) => j.copyWith(modResults: [
+          for (final r in j.modResults) r.mod.modId == modId ? r.withUndo(problem: problem) : r,
+        ]));
   }
 
   /// Continue, on a halted run: every job the halt held back goes on from where it stopped.

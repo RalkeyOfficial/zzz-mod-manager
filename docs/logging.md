@@ -92,7 +92,7 @@ than which file noticed it.
 | `download.pump` / `download.worker` | The isolate arm, and lines relayed from inside it (§8) |
 | `archive` | Extraction, 7-Zip, unsafe entries |
 | `install` | A Browse download's install: its questions, Turn on after installing, the mod page a card's Install fetches |
-| `update` | The update dialog and the apply flow's own steps, such as a failed scan for a sibling group; an update run's jobs, their halt and the seconds each stage took (`update stage ended`) |
+| `update` | The update dialog and the apply flow's own steps, such as a failed scan for a sibling group; an update run's jobs, their halt and the seconds each stage took (`update stage ended`); Undo on a finished row, `update undone` with the mod, the folder and whether it was a restore or a Take out, and `update not undone` with the reason and, when something threw, the error |
 | `update.apply` | The applier's phases |
 | `update.check` | The startup update check failing |
 | `update.app` | The About page's check for a newer release of the app ([`app-updates.md`](app-updates.md)) |

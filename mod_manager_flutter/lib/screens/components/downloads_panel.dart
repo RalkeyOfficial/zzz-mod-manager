@@ -21,6 +21,7 @@ import '../../services/platform_service.dart';
 import '../../services/platform_service_factory.dart';
 import '../../services/shader_fixes/shader_fixes_service.dart';
 import '../../services/update_apply/update_run_stages.dart' show UpdateKeptOf, skipUpdateQuestion;
+import '../../services/update_apply/update_undo.dart';
 import '../../services/update_check.dart';
 import '../../utils/byte_format.dart';
 import '../../utils/categories.dart';
@@ -36,7 +37,9 @@ import 'network_link_notice.dart';
 import 'progress_track.dart';
 import 'resolve/resolve_fragments.dart';
 import 'shader_fixes_notices.dart';
+import 'update_finished_detail.dart';
 import 'update_run_words.dart';
+import 'update_undo_action.dart';
 import 'zenith_controls.dart';
 
 final Logger _log = Logger('ui.downloads');
@@ -542,6 +545,8 @@ class _DownloadRow extends ConsumerWidget {
                       name,
                       file,
                       Text(line, style: lineStyle?.copyWith(color: palette.attention.foreground)),
+                      // A failed job of several mods may have written or skipped some of them, which only these lines say.
+                      if (failedUpdate && job.update!.mods.length > 1) _UpdateModLines(job: job, actions: actions),
                     ],
                   ),
                   Wrap(
@@ -600,6 +605,9 @@ class _DownloadRow extends ConsumerWidget {
             ],
           ),
         );
+
+      case DownloadJobState.done when job.isUpdate:
+        return _UpdateFinished(job: job, name: name, file: file, tile: tile, actions: actions);
 
       case DownloadJobState.done || DownloadJobState.failed:
         final failed = job.state == DownloadJobState.failed;
@@ -944,6 +952,222 @@ class _UpdateWorking extends StatelessWidget {
   }
 }
 
+/// An update run's Finished row (`docs/update-runs.md` §5, §8): what came of its mod, "Updated · the 12 Aug file is a snapshot",
+/// with the files removed, the hotkeys changed and the folders left out under it, and Undo at the right while the rule offers it.
+/// A job of several mods says the same for each of them on a line of its own, each with its own Undo, and no Undo for them all.
+class _UpdateFinished extends StatelessWidget {
+  const _UpdateFinished({
+    required this.job,
+    required this.name,
+    required this.file,
+    required this.tile,
+    required this.actions,
+  });
+
+  final DownloadJob job;
+  final Widget name;
+  final Widget file;
+  final Widget tile;
+  final _RowCallbacks actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = context.loc;
+    final lineStyle = Theme.of(context).textTheme.bodySmall?.copyWith(color: ZenithPalette.of(context).text3);
+    final mods = job.update!.mods;
+    final only = mods.length == 1 ? job.resultFor(mods.single.modId) : null;
+    final character = actions.characterOf(job);
+    final finishedAt = job.finishedAt;
+    final where = [
+      if (character != null) libraryGroupName(libraryGroupOf(character), loc),
+      if (finishedAt != null) relativeAgeLabel(loc, finishedAt, actions.now),
+    ];
+
+    if (only == null) {
+      return _RowFrame(
+        children: [
+          tile,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 2,
+              children: [
+                name,
+                file,
+                Text(_finishedLine(loc, job, actions), maxLines: 3, overflow: TextOverflow.ellipsis, style: lineStyle),
+                if (mods.length > 1) _UpdateModLines(job: job, actions: actions),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    final modId = only.mod.modId;
+    final facts = UpdateFinishedFacts.of(job, modId);
+    String nameOf(String id) => updateModName(actions.mod(id), job, id);
+    return _RowFrame(
+      children: [
+        tile,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 2,
+            children: [
+              name,
+              file,
+              _UpdateModLine(job: job, result: only, facts: facts, actions: actions, trailing: where, maxLines: 3),
+              _detailOf(job, only, facts, nameOf),
+            ],
+          ),
+        ),
+        _UpdateUndoButton(job: job, modId: modId),
+      ],
+    );
+  }
+}
+
+/// What the write did for [result]'s mod, under its line. A press of Undo that did nothing hides the line's "Updated · the 12 Aug file is a snapshot",
+/// so the snapshot leads the detail then.
+Widget _detailOf(DownloadJob job, UpdateModResult result, UpdateFinishedFacts facts, String Function(String modId) nameOf) =>
+    Builder(builder: (context) {
+      final ownUpdate = result.end == UpdateModEnd.written && !result.patchAdded;
+      return UpdateFinishedDetail(
+        facts: facts,
+        modName: nameOf(facts.folderId ?? result.mod.modId),
+        lead: ownUpdate && result.undoProblem != null ? updateSnapshotText(context.loc, facts.heldFileDate) : null,
+      );
+    });
+
+/// What came of one mod of a finished update job, "Updated · the 12 Aug file is a snapshot", led by [lead] and followed by [trailing].
+/// "Couldn't undo" with why is in the danger colour, as on the Updates page's row.
+class _UpdateModLine extends StatelessWidget {
+  const _UpdateModLine({
+    required this.job,
+    required this.result,
+    required this.facts,
+    required this.actions,
+    this.lead,
+    this.trailing = const <String>[],
+    this.maxLines = 2,
+    this.color,
+  });
+
+  final DownloadJob job;
+  final UpdateModResult result;
+  final UpdateFinishedFacts facts;
+  final _RowCallbacks actions;
+  final String? lead;
+  final List<String> trailing;
+  final int maxLines;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = context.loc;
+    final palette = ZenithPalette.of(context);
+    final style = Theme.of(context).textTheme.bodySmall?.copyWith(color: color ?? palette.text3);
+    final modId = result.mod.modId;
+    final line = updateModLineText(
+      loc,
+      job,
+      result,
+      heldFileDate: facts.heldFileDate,
+      stillOn: actions.heldFileDate(job, modId),
+      nameOf: (id) => updateModName(actions.mod(id), job, id),
+    );
+    return Text.rich(
+      TextSpan(children: [
+        if (lead case final lead?) TextSpan(text: lead),
+        TextSpan(
+          text: line,
+          style: result.undoProblem == null ? null : TextStyle(color: palette.badgeMissing.foreground),
+        ),
+        if (trailing.isNotEmpty) TextSpan(text: ' · ${trailing.join(' · ')}'),
+      ]),
+      maxLines: maxLines,
+      overflow: TextOverflow.ellipsis,
+      style: style,
+    );
+  }
+}
+
+/// One line for each mod of an update job of several: its name and what came of it, each written one's own Undo and its detail under it.
+class _UpdateModLines extends StatelessWidget {
+  const _UpdateModLines({required this.job, required this.actions});
+
+  final DownloadJob job;
+  final _RowCallbacks actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = context.loc;
+    final palette = ZenithPalette.of(context);
+    String nameOf(String id) => updateModName(actions.mod(id), job, id);
+    final lines = [
+      for (final mod in job.update!.mods)
+        if (job.resultFor(mod.modId) case final result?) (result: result, facts: UpdateFinishedFacts.of(job, mod.modId)),
+    ];
+    // The archive's folders no written folder took are the job's, so they are said once, under its mods.
+    final leftOut = lines.map((line) => line.facts.leftOut).firstWhere((folders) => folders.isNotEmpty, orElse: () => const []);
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 6,
+        children: [
+          for (final (:result, :facts) in lines)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 1,
+              children: [
+                Row(
+                  spacing: 8,
+                  children: [
+                    Expanded(
+                      child: _UpdateModLine(
+                        job: job,
+                        result: result,
+                        facts: facts,
+                        actions: actions,
+                        lead: loc.t('downloads.update.mod_lead', params: {'mod': nameOf(result.mod.modId)}),
+                        color: palette.text2,
+                      ),
+                    ),
+                    _UpdateUndoButton(job: job, modId: result.mod.modId, quiet: true),
+                  ],
+                ),
+                _detailOf(job, result, facts.ownOnly, nameOf),
+              ],
+            ),
+          if (leftOut.isNotEmpty) UpdateFinishedDetail(facts: UpdateFinishedFacts(leftOut: leftOut), modName: job.subject),
+        ],
+      ),
+    );
+  }
+}
+
+/// Undo for the mod in the folder [modId] of [job], drawn only while the rule offers it ([updateUndoProvider]).
+/// [quiet] is the text button of a mod's own line under a job of several; otherwise the board's outlined button at the row's right.
+class _UpdateUndoButton extends ConsumerWidget {
+  const _UpdateUndoButton({required this.job, required this.modId, this.quiet = false});
+
+  final DownloadJob job;
+  final String modId;
+  final bool quiet;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final wrote = job.resultFor(modId)?.hasWrite ?? false;
+    if (!wrote || ref.watch(updateUndoProvider((seq: job.seq, modId: modId))) != null) return const SizedBox.shrink();
+    void undo() => unawaited(undoUpdate(ProviderScope.containerOf(context, listen: false), job.seq, modId));
+    final label = Text(context.loc.t('downloads.update.undo'));
+    return quiet
+        ? TextButton(style: smallButtonStyle(context), onPressed: undo, child: label)
+        : OutlinedButton(style: smallButtonStyle(context), onPressed: undo, child: label);
+  }
+}
+
 /// "79 of 233 MB · 4.1 MB/s", for a transfer past its "Connecting..." ([updateIsConnecting]).
 String _updateTransferLine(AppLocalizations loc, DownloadJob job) => [
       ?_transferred(loc, job),
@@ -1055,7 +1279,7 @@ String _finishedLine(AppLocalizations loc, DownloadJob job, _RowCallbacks action
         job.skipReason,
         stillOn: actions.heldFileDate(job),
         result: job.resultFor(job.update?.primary.modId ?? ''),
-        nameOf: (id) => actions.mod(id)?.name ?? id,
+        nameOf: (id) => updateModName(actions.mod(id), job, id),
       ),
     JobOutcome.undone => loc.t('downloads.update.undone'),
     JobOutcome.nothingInstalled || null => job.headline ?? loc.t('downloads.done'),

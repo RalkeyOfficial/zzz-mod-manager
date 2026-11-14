@@ -25,6 +25,7 @@ import 'update_applier.dart';
 import 'update_layout.dart';
 import 'update_prepare.dart';
 import 'update_target.dart';
+import 'update_undo.dart' show UpdateUndoRecord;
 import 'update_write.dart';
 import 'update_write_route.dart';
 
@@ -232,8 +233,6 @@ Future<UpdateStageResult> writeUpdateJob(
 
   final results = {for (final result in plan.results) result.mod.modId: result};
   var report = const UpdateReport(applied: [], outcome: GroupWriteOutcome(settledMarks: <String>{}, changed: false));
-  // A placement's own entry in the report, which says nothing about the base of the folder it went into.
-  final placed = Set<AppliedUpdate>.identity();
   try {
     if (plan.targets.isNotEmpty || plan.writesPatch) {
       report = await writeUpdate(
@@ -245,8 +244,19 @@ Future<UpdateStageResult> writeUpdateJob(
       );
     }
     if (prepared is PreparedPatch && report.outcome.changed) report = _withVerdictForgotten(container, report, prepared.request.mod.id);
-    final attempted = {for (final applied in report.applied) applied.mod.id};
     final written = {for (final applied in report.applied) if (applied.result.success) applied.mod.id};
+    // The write counter of each folder this job has written, as its last write of it started; null when another write overlapped it.
+    // That write is the last to move it, so a counter past this is a write by something else since.
+    final ownWrite = {for (final applied in report.applied) applied.mod.id: applied.writesStarted};
+    bool writtenSinceOwn(String modId) => ownWrite.containsKey(modId)
+        ? ownWrite[modId] == null || container.read(modWritesStartedProvider)[modId] != ownWrite[modId]
+        : since.moved(modId);
+    // A folder takes one placement per job, and none once a write of the job left it part-way (`docs/update-runs.md` §6).
+    // Keyed by folder, with the job's mod whose write changed it.
+    final changedByJob = <String, ({String modId, bool partWay})>{
+      for (final applied in report.applied)
+        if (applied.result.failure == UpdateApplyFailure.copy) applied.mod.id: (modId: applied.mod.id, partWay: true),
+    };
     for (final placement in plan.placements) {
       final mod = placement.mod;
       final into = library.where((m) => m.id == placement.intoModId).firstOrNull;
@@ -255,8 +265,12 @@ Future<UpdateStageResult> writeUpdateJob(
             failure: UpdateFailure(UpdateFailureKind.refused, cause: StateError('the mod to patch is not in the library')));
         continue;
       }
-      // A folder this job has just written moved its own counter; anything else that moved it is a write by something else.
-      if (container.read(modWritesInProgressProvider).contains(into.id) || (!attempted.contains(into.id) && since.moved(into.id))) {
+      if (changedByJob[into.id] case final changedBy?) {
+        results[mod.modId] =
+            UpdateModResult.skipped(mod, UpdateSkipReason.changedByThisUpdate, alongWith: into.id, changedBy: changedBy);
+        continue;
+      }
+      if (container.read(modWritesInProgressProvider).contains(into.id) || writtenSinceOwn(into.id)) {
         results[mod.modId] = UpdateModResult.skipped(mod, UpdateSkipReason.beingWritten);
         continue;
       }
@@ -270,8 +284,12 @@ Future<UpdateStageResult> writeUpdateJob(
         dismissBase: onTop && dismissUpTo != null ? (layer: mod.layer, until: dismissUpTo) : null,
         onStep: onStep,
       );
-      placed.add(applied);
-      report = report.including(applied);
+      report = report.including(applied, forMod: mod.modId);
+      // A placement refused before its write started has neither, and leaves the counter where it was.
+      if (applied.writesStarted != null || applied.result.snapshot != null) ownWrite[into.id] = applied.writesStarted;
+      if (applied.result.success || applied.result.failure == UpdateApplyFailure.copy) {
+        changedByJob[into.id] = (modId: mod.modId, partWay: !applied.result.success);
+      }
       if (applied.result.success) {
         // A patch layer changes what the folder's verdict says about it; the mod the update is for keeps it as the mark the write removed, so its row reads the same.
         // A mod of this job whose own update was not written keeps its verdict, since that update is still to take.
@@ -288,10 +306,11 @@ Future<UpdateStageResult> writeUpdateJob(
     clock.end();
   }
 
+  final placements = report.placed.values.toSet();
   for (final applied in report.applied) {
     final mod = job.update!.modIn(applied.mod.id);
     // A placement has its result on the mod it was for, above; the folder it went into keeps its own.
-    if (mod == null || placed.contains(applied)) continue;
+    if (mod == null || placements.contains(applied)) continue;
     final result = applied.result;
     results[mod.modId] = result.success
         ? UpdateModResult.written(mod)
@@ -303,7 +322,61 @@ Future<UpdateStageResult> writeUpdateJob(
     final mod = job.update!.modIn(skipped.id)!;
     results[mod.modId] = UpdateModResult.skipped(mod, UpdateSkipReason.beingWritten);
   }
+  bool wrote(String modId) => results[modId]?.hasWrite ?? false;
+  report = report.copyWith(
+    undo: {
+      for (final mod in job.update!.mods)
+        if (_undoRecordFor(mod, results[mod.modId], report) case final record?) mod.modId: record,
+    },
+    leftOut: switch (prepared) {
+      PreparedFolders() => _leftOut([
+          for (final target in plan.targets)
+            if (wrote(target.mod.id)) target,
+          for (final placement in plan.placements)
+            if (wrote(placement.mod.modId)) placement.target,
+        ]),
+      PreparedPatch() => const <String>[],
+    },
+  );
   return _settled(job, [for (final mod in job.update!.mods) ?results[mod.modId]], report);
+}
+
+/// What Undo takes back for [mod], from what [report] says its write did ([UpdateReport.writeFor]). Null when nothing of it can be undone:
+/// nothing was written for it, the write took no snapshot, or another write was running on the folder as this one started.
+/// A placement that added a layer is taken out; every other write is restored from its snapshot (`docs/update-runs.md` §8).
+UpdateUndoRecord? _undoRecordFor(UpdateMod mod, UpdateModResult? result, UpdateReport report) {
+  if (result == null || !result.hasWrite) return null;
+  final written = report.writeFor(mod.modId);
+  if (written == null || !written.result.success) return null;
+  final folderId = written.mod.id;
+  final snapshot = written.result.snapshot;
+  final writesStarted = written.writesStarted;
+  if (snapshot == null || writesStarted == null) return null;
+  if (!identical(written, report.placed[mod.modId]) || !written.newLayer) {
+    return UpdateUndoRecord(folderId: folderId, snapshot: snapshot, writesStarted: writesStarted);
+  }
+  return UpdateUndoRecord(
+    folderId: folderId,
+    snapshot: snapshot,
+    writesStarted: writesStarted,
+    takeOut: DownloadKey.patch(mod.layer.modId),
+    // Put on top of its own folder, the placement wrote the dismissal Ignore would have on the mod's own layer.
+    baseDismissal: folderId == mod.modId && mod.dismissUpTo != null ? (layer: mod.layer, until: mod.heldDismissedUntil) : null,
+  );
+}
+
+/// The archive's top-level folders, by name, that none of [targets] took.
+List<String> _leftOut(List<UpdateTarget> targets) {
+  final taken = {
+    for (final target in targets)
+      for (final source in target.preview.sourceFolders) path.basename(source),
+  };
+  return {
+    for (final target in targets)
+      for (final folder in target.preview.layout.unused)
+        if (!taken.contains(path.basename(folder))) path.basename(folder),
+  }.toList()
+    ..sort();
 }
 
 /// [report] with the session verdict of the folder [modId] dropped, as a write of a patch layer leaves it to its caller:
@@ -313,12 +386,7 @@ UpdateReport _withVerdictForgotten(ProviderContainer container, UpdateReport rep
   final mark = container.read(modUpdateChecksProvider)[modId];
   forgetUpdateCheck(container, modId);
   if (!keep || mark == null) return report;
-  return UpdateReport(
-    applied: report.applied,
-    outcome: report.outcome,
-    skipped: report.skipped,
-    removedMarks: {...report.removedMarks, modId: mark},
-  );
+  return report.copyWith(removedMarks: {...report.removedMarks, modId: mark});
 }
 
 /// The mods of [job] its write leaves out, by folder id, each skipped with why:
@@ -445,7 +513,7 @@ UpdateStageResult _settled(DownloadJob job, List<UpdateModResult> results, Updat
   }
   final refused = ended(UpdateModEnd.refused);
   if (refused.isNotEmpty) return UpdateStageFailed(refused.first.failure!, results: results, report: report);
-  return UpdateStageSkipped(results.first.skipReason ?? UpdateSkipReason.beingWritten, results: results);
+  return UpdateStageSkipped(results.first.skipReason ?? UpdateSkipReason.beingWritten, results: results, report: report);
 }
 
 Future<bool> _unpackThere(UpdateUnpacked unpacked) async {

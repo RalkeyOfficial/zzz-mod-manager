@@ -5,12 +5,14 @@
 library;
 
 import '../../l10n/app_localizations.dart';
+import '../../models/character_info.dart';
 import '../../services/download/download_exceptions.dart';
 import '../../services/download/download_job.dart';
 import '../../services/download/download_progress.dart';
 import '../../services/download/queue_policy.dart';
 import '../../services/download/update_job.dart';
 import '../../services/update_apply/update_applier.dart' show UpdateWriteStep;
+import '../../services/update_apply/update_undo.dart' show updateUndoRecordOf;
 import '../../utils/byte_format.dart';
 import 'resolve/resolve_fragments.dart';
 
@@ -210,9 +212,90 @@ String downloadFailureText(AppLocalizations loc, Object? error) => switch (error
       _ => loc.t('downloads.failed'),
     };
 
+/// The repeat key of the counted "N mods updated" card, which an undone update counts down.
+const String kUpdatesDoneRepeat = 'update-run-done';
+
+/// The repeat key of the counted "Patch added to N mods" card, which a patch taken out by Undo counts down.
+const String kUpdatesPatchRepeat = 'update-run-patch';
+
+/// [modId]'s name, a mod of [job]: the library's [mod], else the name it had when the job was made, else its folder id.
+/// The one name a mod of a run goes by on the cards, so the card an undone update counts down finds it.
+String updateModName(ModInfo? mod, DownloadJob job, String modId) =>
+    mod?.name ?? job.update?.modIn(modId)?.name ?? (modId == job.update?.primary.modId ? job.subject : modId);
+
+/// "the 12 Aug file is a snapshot": the file a mod held before its update, which the write kept. [date] is that file's upload date.
+String updateSnapshotText(AppLocalizations loc, DateTime? date) => date == null
+    ? loc.t('downloads.update.snapshot_undated')
+    : loc.t('downloads.update.snapshot', params: {'date': formatResolveDate(date)});
+
+/// What Undo of [result], a mod of [job], left: "back on the 12 Aug file" for the mod's own folder, which [heldFileDate] dates;
+/// for a patch put into another mod, through [nameOf], "the patch came out of Miyabi" after Take out and "Miyabi is back as it was" after a restore.
+String updateUndoneText(
+  AppLocalizations loc,
+  DownloadJob job,
+  UpdateModResult result, {
+  DateTime? heldFileDate,
+  required String Function(String modId) nameOf,
+}) {
+  if (result.patchedElsewhere) {
+    final into = nameOf(result.patchedInto!);
+    final takenOut = updateUndoRecordOf(job, result.mod.modId)?.takeOut != null;
+    return loc.t(takenOut ? 'downloads.update.patch_out_of' : 'downloads.update.back_as_it_was', params: {'mod': into});
+  }
+  return heldFileDate == null
+      ? loc.t('downloads.update.back_on_undated')
+      : loc.t('downloads.update.back_on', params: {'date': formatResolveDate(heldFileDate)});
+}
+
+/// Why a press of Undo did nothing. A press stores none of the rule's other answers, which only leave the row without Undo.
+String updateUndoProblemText(AppLocalizations loc, UpdateUndoProblem problem) => loc.t(switch (problem) {
+      UpdateUndoProblem.folderGone => 'downloads.update.undo_reason.folder_gone',
+      UpdateUndoProblem.snapshotGone => 'downloads.update.undo_reason.snapshot_gone',
+      UpdateUndoProblem.notRead => 'downloads.update.undo_reason.not_read',
+      UpdateUndoProblem.notSaved => 'downloads.update.undo_reason.not_saved',
+      UpdateUndoProblem.recordNotRemoved => 'downloads.update.undo_reason.record_not_removed',
+      UpdateUndoProblem.partWay => 'downloads.update.undo_reason.part_way',
+      UpdateUndoProblem.writtenSince ||
+      UpdateUndoProblem.beingWritten ||
+      UpdateUndoProblem.nothingToUndo ||
+      UpdateUndoProblem.unknown =>
+        'downloads.update.undo_reason.written_since',
+    });
+
+/// What came of one mod of a finished update job, as one line: "Updated · the 12 Aug file is a snapshot", "Patch added on top",
+/// "Skipped · its folder was being changed", "Couldn't update" with why, "Undone · back on the 12 Aug file", "Couldn't undo" with why.
+/// [heldFileDate] is the date of the file the mod held before the write, [stillOn] the one it holds now, and [nameOf] names another mod.
+String updateModLineText(
+  AppLocalizations loc,
+  DownloadJob job,
+  UpdateModResult result, {
+  DateTime? heldFileDate,
+  DateTime? stillOn,
+  required String Function(String modId) nameOf,
+}) {
+  final undoProblem = result.undoProblem;
+  if (result.undone) {
+    return loc.t('downloads.update.undone_line',
+        params: {'detail': updateUndoneText(loc, job, result, heldFileDate: heldFileDate, nameOf: nameOf)});
+  }
+  if (undoProblem != null) {
+    return loc.t('downloads.update.undo_failed_line', params: {'reason': updateUndoProblemText(loc, undoProblem)});
+  }
+  return switch (result.end) {
+    UpdateModEnd.written when result.patchAdded => loc.t('downloads.update.patch_on_top'),
+    UpdateModEnd.written => loc.t('downloads.update.updated_line', params: {'detail': updateSnapshotText(loc, heldFileDate)}),
+    UpdateModEnd.skipped =>
+      updateSkipText(loc, result.skipReason, stillOn: stillOn, result: result, nameOf: nameOf),
+    UpdateModEnd.failed || UpdateModEnd.refused => loc.t('downloads.update.failed_line',
+        params: {'reason': updateFailureText(loc, result.failure ?? job.error, keptIn: job.archive?.parent.path)}),
+  };
+}
+
 /// Why an update, or one mod of it, was skipped. [stillOn] is the date of the file the mod still holds, said for a skip the user chose.
-/// [result] is the mod's own, which names, through [nameOf], the mod whose update wrote this one ([UpdateSkipReason.alreadyUpdated])
-/// or the mod the file went into as a patch ([UpdateSkipReason.patchAddedElsewhere]).
+/// [result] is the mod's own, which names, through [nameOf], the mod whose update wrote this one ([UpdateSkipReason.alreadyUpdated]),
+/// the mod the file went into as a patch ([UpdateSkipReason.patchAddedElsewhere]),
+/// or the mod it was going into, which the same update had already changed ([UpdateSkipReason.changedByThisUpdate]);
+/// when that is the mod's own folder, it names the mod whose patch changed it instead.
 String updateSkipText(
   AppLocalizations loc,
   UpdateSkipReason? reason, {
@@ -236,6 +319,18 @@ String updateSkipText(
     UpdateSkipReason.patchAddedElsewhere => patchedInto == null
         ? loc.t('downloads.update.reason.patch_elsewhere_unnamed')
         : loc.t('downloads.update.reason.patch_elsewhere', params: {'mod': patchedInto}),
+    UpdateSkipReason.changedByThisUpdate => switch (result) {
+        // On the row of the mod whose own folder it is, the reason says whose write changed it.
+        UpdateModResult(alongWith: final into?, changedBy: final by?, mod: UpdateMod(:final modId)) when into == modId =>
+          by.modId == into
+              ? loc.t('downloads.update.reason.left_part_way')
+              : loc.t(
+                  by.partWay ? 'downloads.update.reason.patch_left_part_way' : 'downloads.update.reason.patch_went_in_first',
+                  params: {'mod': nameOf(by.modId)}),
+        _ => alongWith == null
+            ? loc.t('downloads.update.reason.changed_by_this_update_unnamed')
+            : loc.t('downloads.update.reason.changed_by_this_update', params: {'mod': alongWith}),
+      },
   };
   return why == null
       ? loc.t('downloads.update.skipped')

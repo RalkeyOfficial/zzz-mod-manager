@@ -200,6 +200,36 @@ void main() {
       expect([for (final a in state().single.actions) a.label], ['Show']);
     });
 
+    test('an undone update counts down the card it was counted on, and the card goes with the last one', () {
+      void noop() {}
+      final show = [NotificationAction('Show', noop)];
+      NotificationRepeat updated(String subject) =>
+          NotificationRepeat('update-run-done', subjects: [subject], title: (n) => '$n mods updated', countedActions: show);
+      for (final mod in ['A', 'B', 'C']) {
+        center().done('$mod updated', body: 'kept', repeat: updated(mod));
+      }
+      center().warning('Something', body: 'x');
+      final id = state().firstWhere((n) => n.kind == NotificationKind.done).id;
+
+      center().countDown(NotificationKind.done, 'update-run-done', 'B');
+      final card = state().firstWhere((n) => n.id == id);
+      expect(card.title, '2 mods updated');
+      expect(card.subjects, ['A', 'C']);
+      expect(state().map((n) => n.kind), [NotificationKind.done, NotificationKind.warning], reason: 'it keeps its place');
+
+      center().countDown(NotificationKind.done, 'update-run-done', 'X');
+      expect(state().firstWhere((n) => n.id == id).count, 2, reason: 'a subject it does not count changes nothing');
+
+      center().countDown(NotificationKind.done, 'update-run-done', 'A');
+      final one = state().firstWhere((n) => n.id == id);
+      expect(one.title, '1 mods updated');
+      expect(one.body, 'C', reason: 'down to one, the body names it');
+      expect([for (final a in one.actions) a.label], ['Show']);
+
+      center().countDown(NotificationKind.done, 'update-run-done', 'C');
+      expect(state().map((n) => n.kind), [NotificationKind.warning]);
+    });
+
     test('a merge moves the card to the newest place', () {
       center().done('Mod installed', body: 'A', repeat: installed('A'));
       center().warning('Something', body: 'x');

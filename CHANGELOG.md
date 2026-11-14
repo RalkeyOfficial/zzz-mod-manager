@@ -87,8 +87,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - A mod with exactly one newer file starts picked; with several, nothing is picked for you.
   - Ignore on a mod's card writes at once and Undo takes it back, there or on the mod's History tab.
   - Finished updates are counted on one notification, "3 mods updated", whose Show opens Downloads; a download put on top of its mod as a patch has its own, "Patch added to <mod>".
+  - A finished mod's row on the Updates page and in Downloads says which file is kept as a snapshot, how many old files were removed, which hotkeys changed (opening a list of each key before and after) and which of the download's folders were not installed, and Undo puts the mod back as it was, or takes out a patch the update added, as long as nothing else has changed the folder since.
   - A mod that fails says why on its row and in a notification of its own, and the others go on; a failure every update would share, such as a full disk, stops the rest, which read "Stopped" with the reason, and one notification names the mod that stopped them and why.
-  - A mod whose folder is being changed by something else when its turn comes, that left the library, whose update you ignored meanwhile or that was updated meanwhile is skipped and not written.
+  - A mod whose folder is being changed by something else when its turn comes, that left the library, whose update you ignored meanwhile or that was updated meanwhile is skipped and not written, and so is a patch meant for a mod the same update already changed, which says so.
   - Only one update list opens at a time, and pressing Update N while updates run adds the mods not already updating; a mod whose file is already in another download is not added, and a notification says so.
   - The button counts the mods that have a file to install, which can be fewer than the Updates count in the sidebar.
 - An install that turns out to be a patch says so, and remembers it for later.

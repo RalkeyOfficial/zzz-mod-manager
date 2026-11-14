@@ -249,6 +249,7 @@ Each swatch is painted in the colour it gives the current brightness: on paper t
 Nothing on the page is swapped for a spinner while it works, since the page reads its values from providers that are already hydrated. A long-running action reports **where it was started**: the auto-tag button shows the Working state ([`app-architecture.md`](app-architecture.md) §1) and nothing else on the page moves.
 
 `autoTagAllMods` is a folder scan plus one sidecar read per mod and a write for the few it tags, entirely local. The same shape is measured elsewhere in this repo at **30 ms for 23 mods including every write** ([`origin-tracking.md` §3](origin-tracking.md#3-the-offline-backfill)), so the honest UI is a button that usually doesn't show it. The pass reports in a notification naming up to three of the mods it tagged, and it completes even when the user leaves the page, since it runs in the service and not the widget.
+Each tag it writes is marked as a write of that folder (`autoTagLibrary`, as dropping a card on a row of the character list marks it), so an update run's Undo is not offered over it ([`update-runs.md`](update-runs.md) §8).
 
 **The content filter has two homes deliberately.** The marketplace toolbar is where it is first needed, since the grid is where a user meets it, and Settings is where anyone looks for a preference they set once. Both write `content_filter` and both read `contentFilterProvider`, so they cannot disagree.
 

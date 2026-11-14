@@ -10,9 +10,7 @@ import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../services/backup/snapshot_service.dart';
 import '../../services/log/logger.dart';
-import '../../services/update_apply/mod_activation_port.dart';
-import '../../services/update_apply/update_applier.dart';
-import '../../services/writes_in_flight.dart';
+import '../../services/mod_rollback.dart';
 import '../../utils/notification_actions.dart';
 import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
@@ -104,44 +102,6 @@ Future<bool> restoreSnapshotFlow(
   } finally {
     if (!ended) card.dismiss();
   }
-}
-
-/// The write half of a restore, with no `BuildContext`, so a card's Undo can run it too: puts [mod]'s folder back to
-/// [snapshot] while the mod is marked as being written, then reads the saved versions, the mod's keys and the library
-/// again.
-Future<UpdateApplyResult> writeSnapshotBack(
-  ProviderContainer container, {
-  required ModInfo mod,
-  required ModSnapshot snapshot,
-}) async {
-  final mods = await container.read(modManagerServiceProvider.future);
-  final modsPath = mods.modsPath;
-  if (modsPath == null || modsPath.isEmpty) return UpdateApplyResult.failed(UpdateApplyFailure.modMissing);
-
-  final snapshots = container.read(snapshotServiceProvider);
-  final applier = UpdateApplier(
-    snapshots: snapshots,
-    activation: ModManagerActivationPort(mods, leaveOff: (m) => leftOffAfterWrite(container, m)),
-  );
-  // The prune is part of the write, so closing the app waits for it too.
-  final result = await WritesInFlight.shared.track(() async {
-    final result = await whileWritingMod(
-      container,
-      mod.id,
-      () => applier.restore(modName: mod.id, modFolder: Directory(path.join(modsPath, mod.id)), snapshot: snapshot),
-    );
-
-    // A rollback takes a safety copy of its own before it writes, so the store's budget moved here as on any other write.
-    // Whether the restore landed or not: the copy was taken first.
-    if (result.snapshot != null) await snapshots.prune();
-    return result;
-  });
-  container.invalidate(modBackupsProvider);
-  // Read again whatever the stamp says: a restore puts back old times, which can match what was there before.
-  mods.invalidateKeybinds(mod.id);
-  // A failed restore may still have changed the folder, so it is read again either way.
-  await container.read(libraryProvider.notifier).rescan();
-  return result;
 }
 
 /// What an Undo's cards say. Undoing a restore and putting a patch back differ only in their words.

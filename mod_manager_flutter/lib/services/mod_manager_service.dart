@@ -1429,7 +1429,9 @@ class ModManagerService {
 
   /// Автоматично визначає та встановлює теги для всіх модів
   /// Повертає кількість модів з визначеними тегами
-  Future<Map<String, String>> autoTagAllMods() async {
+  ///
+  /// [tag] writes each folder's tag in place of [setModCharacter], so a caller can mark the write.
+  Future<Map<String, String>> autoTagAllMods({Future<bool> Function(String modName, String characterId)? tag}) async {
     try {
       final modNames = await scanMods();
       final autoTags = <String, String>{};
@@ -1450,7 +1452,7 @@ class ModManagerService {
         final detectedChar = _detectCharacterFromName(modName);
         if (detectedChar != null) {
           // Writes the in-folder sidecar and mirrors to config.json.
-          await setModCharacter(modName, detectedChar);
+          await (tag ?? setModCharacter)(modName, detectedChar);
           autoTags[modName] = detectedChar;
         }
       }

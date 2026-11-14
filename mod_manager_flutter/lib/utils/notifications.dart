@@ -231,6 +231,27 @@ class NotificationCenter extends Notifier<List<AppNotification>> {
     return NotificationHandle(this, card.id);
   }
 
+  /// Takes [subject] off the counted card of [kind] whose repeat is [key], as an undone update leaves "3 mods updated" at "2 mods updated".
+  /// The card keeps its place and its clock; it goes when [subject] was all it counted, and nothing changes when it does not count [subject].
+  /// Down to one, its body is the one subject left, since a counted card's portrait and single-mod body are gone.
+  void countDown(NotificationKind kind, String key, String subject) {
+    final card = state.where((n) => n.kind == kind && n.repeat?.key == key).firstOrNull;
+    final index = card?.subjects.indexOf(subject) ?? -1;
+    if (card == null || index < 0) return;
+    final left = [...card.subjects]..removeAt(index);
+    if (left.isEmpty) return dismiss(card.id);
+    final repeat = card.repeat!;
+    final count = left.length;
+    final next = card.copyWith(
+      title: repeat.title?.call(count) ?? card.title,
+      body: count == 1 && repeat.body == null ? left.single : (repeat.body?.call(count) ?? card.body),
+      subjects: left,
+      count: count,
+    );
+    _log.info('notification counted down', fields: {'key': key, 'count': count});
+    state = [for (final n in state) n.id == card.id ? next : n];
+  }
+
   /// Every notification the app raises passes through here, so the log holds what the user was told and when,
   /// beside whatever caused it. The text is already localized: the point is to record what was on screen.
   void _logRaise(AppNotification n) {

@@ -807,14 +807,10 @@ void main() {
       expect(joinsUpdateJob(job()), isFalse, reason: 'a Browse download of the same file');
     });
 
-    test('a finished row: Show for a patch added, nothing for a skipped or undone one', () {
-      for (final (outcome, actions) in [
-        (JobOutcome.patchAdded, [DownloadRowAction.show]),
-        (JobOutcome.skipped, <DownloadRowAction>[]),
-        (JobOutcome.undone, <DownloadRowAction>[]),
-      ]) {
+    test('a finished update row has no Show in any outcome: Undo is drawn in its place, per mod', () {
+      for (final outcome in [JobOutcome.updated, JobOutcome.patchAdded, JobOutcome.skipped, JobOutcome.undone]) {
         final done = update(10, state: DownloadJobState.done).copyWith(outcome: outcome);
-        expect(rowActions(done, [done]), actions, reason: outcome.name);
+        expect(rowActions(done, [done]), isEmpty, reason: outcome.name);
       }
     });
 

@@ -834,6 +834,28 @@ void main() {
     expect(ids, {card.id}, reason: 'the Working card became the error rather than raising a second card');
   });
 
+  testWidgets("a drag onto a row is counted as a write of the mod's folder, so an update's Undo is not offered over it",
+      (tester) async {
+    temp.write('Ellen', 'Ellen.ini', '[TextureOverrideBody]\nhash = 1\n');
+    final container = await pumpModsScreen(tester, temp, [mod('Ellen')], selected: 'ellen');
+    expect(container.read(modWritesStartedProvider)['Ellen'], isNull);
+
+    final gesture = await tester.startGesture(tester.getCenter(cardOf('Ellen')));
+    await tester.pump(const Duration(milliseconds: 600));
+    await gesture.moveTo(tester.getCenter(find.byKey(const ValueKey('character_cat_ui'))));
+    await tester.pump();
+    await tester.runAsync(() async {
+      await gesture.up();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(container.read(modWritesStartedProvider)['Ellen'], 1);
+    expect(container.read(notificationsProvider), isEmpty, reason: 'the move worked, so its Working card went');
+  });
+
   group('a toggle that fails says so', () {
     Finder switchOf(String id) => find.descendant(of: cardOf(id), matching: find.byType(ZenithSwitch));
 

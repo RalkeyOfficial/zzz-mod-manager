@@ -22,6 +22,7 @@ import '../../models/mod_origin.dart';
 import '../../models/origin_enums.dart';
 import '../../utils/gamebanana_url.dart';
 import '../../utils/state_providers.dart';
+import '../download/download_job.dart';
 import '../folder_contents.dart';
 import '../mod_manager_service.dart';
 import '../patch_placement.dart';
@@ -32,6 +33,7 @@ import 'update_applier.dart';
 import 'update_layout.dart';
 import 'update_prepare.dart';
 import 'update_target.dart';
+import 'update_undo.dart' show UpdateUndoRecord;
 
 /// What a write did, for the caller to say.
 class UpdateReport {
@@ -40,6 +42,9 @@ class UpdateReport {
     required this.outcome,
     this.removedMarks = const <String, UpdateCheck>{},
     this.skipped = const <ModInfo>[],
+    this.placed = const <String, AppliedUpdate>{},
+    this.undo = const <String, UpdateUndoRecord>{},
+    this.leftOut = const <String>[],
   });
 
   /// What the write did to each folder it attempted, in order.
@@ -54,16 +59,50 @@ class UpdateReport {
   /// The marks the write removed, by folder id, as they stood. A patch write removes none: the caller drops the folder's verdict.
   final Map<String, UpdateCheck> removedMarks;
 
-  /// This report and one more folder's write after it, as a run's job that places a patch after its bases reports both.
-  UpdateReport including(AppliedUpdate placed) {
-    final all = [...applied, placed];
-    return UpdateReport(
-      applied: all,
-      skipped: skipped,
-      removedMarks: removedMarks,
-      outcome: _withPlacement(outcome, all),
-    );
-  }
+  /// The placements among [applied], by the folder id of the job's mod whose file each placed as a patch, into its own folder or another's.
+  final Map<String, AppliedUpdate> placed;
+
+  /// What Undo takes back for each mod of a run's job, by the folder id of the job's mod. Only a run's write stage fills it.
+  final Map<String, UpdateUndoRecord> undo;
+
+  /// The archive's top-level folders that no written folder took, by name.
+  final List<String> leftOut;
+
+  /// This report and the placement of [forMod]'s file after it, as a run's job that places a patch after its bases reports both.
+  UpdateReport including(AppliedUpdate placement, {required String forMod}) =>
+      copyWith(applied: [...applied, placement], placed: {...placed, forMod: placement});
+
+  /// The same report with the fields given; a changed [applied] changes the outcome it adds up to, its last entry being a placement.
+  UpdateReport copyWith({
+    List<AppliedUpdate>? applied,
+    Map<String, UpdateCheck>? removedMarks,
+    Map<String, AppliedUpdate>? placed,
+    Map<String, UpdateUndoRecord>? undo,
+    List<String>? leftOut,
+  }) =>
+      UpdateReport(
+        applied: applied ?? this.applied,
+        skipped: skipped,
+        removedMarks: removedMarks ?? this.removedMarks,
+        outcome: applied == null ? outcome : _withPlacement(outcome, applied),
+        placed: placed ?? this.placed,
+        undo: undo ?? this.undo,
+        leftOut: leftOut ?? this.leftOut,
+      );
+
+  /// What the write did for the job's mod [modId]: its file's placement, else its own folder's write,
+  /// the first of that folder's since a job's bases are written before its placements.
+  AppliedUpdate? writeFor(String modId) =>
+      placed[modId] ??
+      applied.where((entry) => entry.mod.id == modId && !placed.values.any((p) => identical(p, entry))).firstOrNull;
+}
+
+/// The report of an update job's write, once it has one.
+extension UpdateReportOf on DownloadJob {
+  UpdateReport? get updateReport => switch (report) {
+        final UpdateReport report => report,
+        _ => null,
+      };
 }
 
 /// What [before] adds up to with a layer's placement after it, the last of [all]:
@@ -206,7 +245,7 @@ Future<void> _writeAll({
 
     // The prune and the record are part of the folder's write, so closing the app waits for them too.
     await WritesInFlight.shared.track(() async {
-      final result = await whileWritingMod(
+      final (result, writesStarted) = await whileWritingModCounted(
         container,
         target.mod.id,
         () => applier.applyBaseThenPatch(
@@ -220,7 +259,7 @@ Future<void> _writeAll({
           onStep: onStep == null ? null : (step) => onStep(target.mod, step),
         ),
       );
-      applied.add(AppliedUpdate(mod: target.mod, result: result));
+      applied.add(AppliedUpdate(mod: target.mod, result: result, writesStarted: writesStarted));
       // Whether the write landed or not, and before anything below can throw: a failed write may still have changed the folder, and a file written over one of the same size can keep its times on NTFS (`docs/library-screen.md` §12).
       mods.invalidateKeybinds(target.mod.id);
 
@@ -264,6 +303,7 @@ Future<UpdateReport> _writePatch(
 
   final UpdateServices services;
   final UpdateApplyResult result;
+  final int? writesStarted;
   try {
     services = await updateServicesFor(container);
     if (skipWhen?.call(mod) ?? false) {
@@ -273,7 +313,7 @@ Future<UpdateReport> _writePatch(
         skipped: [mod],
       );
     }
-    result = await whileWritingMod(container, mod.id, () => _placeLayer(
+    (result, writesStarted) = await whileWritingModCounted(container, mod.id, () => _placeLayer(
       services.applier,
       mod: mod,
       folder: request.modFolder,
@@ -292,7 +332,7 @@ Future<UpdateReport> _writePatch(
   }
   await _afterPlacement(container, services, mod.id, result);
 
-  final applied = [AppliedUpdate(mod: mod, result: result)];
+  final applied = [AppliedUpdate(mod: mod, result: result, writesStarted: writesStarted)];
   final outcome = _withPlacement(const GroupWriteOutcome(settledMarks: <String>{}, changed: false), applied);
   if (!result.success) return UpdateReport(applied: applied, outcome: outcome);
   final mods = services.mods;
@@ -424,7 +464,9 @@ Future<AppliedUpdate> placeUpdateAsPatch(
         versionLabel: file.description,
         archiveMd5: prepared.unpacked.archiveMd5,
       );
-      final result = await whileWritingMod(container, into.id, () async {
+      // Recorded above a layer the folder has, so the patch's own key finds it again; with no layer recorded it becomes the folder's base.
+      final newLayer = (origin?.downloads.isNotEmpty ?? false) && origin!.downloadOf(DownloadKey.patch(request.remoteModId)) == null;
+      final (result, writesStarted) = await whileWritingModCounted(container, into.id, () async {
         final applied = await _placeLayer(
           services.applier,
           mod: into,
@@ -456,7 +498,7 @@ Future<AppliedUpdate> placeUpdateAsPatch(
 
       await _afterPlacement(container, services, into.id, result);
       container.invalidate(libraryProvider);
-      return AppliedUpdate(mod: into, result: result);
+      return AppliedUpdate(mod: into, result: result, newLayer: newLayer, writesStarted: writesStarted);
     });
 
 /// The layer a write of [modId] is about: a patch for a companion, else the base. A page can be both in one folder, so the id alone does not say which.

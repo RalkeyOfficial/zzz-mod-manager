@@ -1057,7 +1057,7 @@ patch somebody no longer has is usually noticed when something offers to update
 it. All three ask `removablePatches`, so none can offer what another refuses, and
 the dialog closes after a removal because the layers it drew are what changed.
 
-**Every Take out drops the folder's session verdict** once the layer is gone, these three and the tracking screen's alike, since all of them run `removePatchFlow`, which does it (`forgetUpdateCheck`).
+**Every Take out drops the folder's session verdict** once the layer is gone, these three and the tracking screen's alike, since all of them run `removePatchFlow`, whose write half does it (`writePatchRemoval`, `forgetPatchRecord`, `forgetUpdateCheck`). An update run's Undo of a patch it added runs that same write half without the question ([`update-runs.md`](update-runs.md) §8), and puts back the mark the run's write kept once the verdict is dropped.
 A verdict names the folder's layers, so kept it would go on naming the patch that came out; dropped, the folder reads as not checked until the next check.
 
 ---

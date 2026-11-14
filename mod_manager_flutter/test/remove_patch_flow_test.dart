@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -9,6 +10,7 @@ import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/dialogs/remove_patch_flow.dart';
+import 'package:mod_manager_flutter/services/backup/snapshot_service.dart';
 import 'package:mod_manager_flutter/services/patch_store.dart';
 import 'package:mod_manager_flutter/services/update_check.dart';
 import 'package:mod_manager_flutter/utils/notifications.dart';
@@ -19,6 +21,36 @@ import 'support/localized_harness.dart';
 import 'support/origin_shorthand.dart';
 import 'support/recording_service.dart';
 import 'support/temp_library.dart';
+
+/// A snapshot store with no room for any snapshot.
+class _RefusingSnapshots extends SnapshotService {
+  _RefusingSnapshots(String rootPath) : super(rootPath: rootPath);
+
+  @override
+  Future<SnapshotAttempt> take({
+    required String modName,
+    required String modUid,
+    required Directory modFolder,
+    required SnapshotReason reason,
+    String? version,
+    String? versionLabel,
+    DateTime? now,
+  }) async =>
+      const SnapshotAttempt.refused(SnapshotNoRoom(requiredBytes: 2, availableBytes: 1));
+}
+
+/// An empty library held in memory that tells [onRead] each time it is read.
+class _CountedLibrary extends LibraryNotifier {
+  _CountedLibrary(this.onRead);
+
+  final void Function() onRead;
+
+  @override
+  FutureOr<List<ModInfo>> build() {
+    onRead();
+    return const <ModInfo>[];
+  }
+}
 
 /// **Taking a patch out, from the press to the bytes.**
 ///
@@ -406,6 +438,40 @@ void main() {
     expect(thrown, isNotNull, reason: 'the record write failed');
     expect(library.read(modName, 'Ellen.ini'), 'the mod');
     expect(service.keysDropped, [modName]);
+  });
+
+  testWidgets('a Take out that fails reads the library and the saved versions again, and says it failed',
+      (tester) async {
+    final origin = await patchedFolder(tester);
+    var backupsReads = 0;
+    var libraryReads = 0;
+    final container = ProviderContainer(overrides: [
+      modManagerServiceProvider.overrideWith((ref) async => library.service),
+      snapshotServiceProvider.overrideWithValue(_RefusingSnapshots(library.snapshots.rootPath)),
+      isGameRunningProvider.overrideWithValue(() async => false),
+      modBackupsProvider.overrideWith((ref) async {
+        backupsReads++;
+        return <String>{};
+      }),
+      libraryProvider.overrideWith(() => _CountedLibrary(() => libraryReads++)),
+    ]);
+    addTearDown(container.dispose);
+    final backups = container.listen(modBackupsProvider, (_, _) {});
+    addTearDown(backups.close);
+    final mods = container.listen(libraryProvider, (_, _) {});
+    addTearDown(mods.close);
+    expect((backupsReads, libraryReads), (1, 1));
+
+    await press(tester, origin, container: container);
+    await confirm(tester);
+    await tester.pump();
+
+    expect(changed, isFalse);
+    final card = container.read(notificationsProvider).single;
+    expect((card.kind, card.title), (NotificationKind.error, 'Could not remove the patch'));
+    expect(library.snapshotsOf(modName), isEmpty, reason: 'nothing was written');
+    expect(backupsReads, 2, reason: 'the saved versions are read again');
+    expect(libraryReads, 2, reason: 'the library is read again');
   });
 
   testWidgets('a file with no saved original stays, and is warned about first',

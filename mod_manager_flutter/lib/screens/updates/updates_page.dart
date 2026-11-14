@@ -20,7 +20,8 @@ import '../../services/download/update_job.dart';
 import '../../services/gamebanana/file_selection.dart';
 import '../../services/installed_record.dart';
 import '../../services/origin_write.dart';
-import '../../services/update_apply/update_write.dart' show UpdateReport;
+import '../../services/update_apply/update_undo.dart';
+import '../../services/update_apply/update_write.dart' show UpdateReport, UpdateReportOf;
 import '../../services/update_check.dart';
 import '../../utils/categories.dart';
 import '../../utils/notifications.dart';
@@ -33,7 +34,9 @@ import '../components/mod_thumb.dart';
 import '../components/progress_track.dart';
 import '../components/resolve/resolve_fragments.dart';
 import '../components/update_count_button.dart';
+import '../components/update_finished_detail.dart';
 import '../components/update_run_words.dart';
+import '../components/update_undo_action.dart';
 import '../components/zenith_controls.dart';
 import '../dialogs/assume_current_dialog.dart';
 import 'updates_coverage.dart';
@@ -592,7 +595,7 @@ class _NewerFiles extends ConsumerWidget {
 
     final shown = {...checks};
     for (final job in run) {
-      if (job.report case UpdateReport(:final removedMarks)) {
+      if (job.updateReport case UpdateReport(:final removedMarks)) {
         for (final MapEntry(key: id, value: check) in removedMarks.entries) {
           if (shown[id]?.hasUpdate != true) shown[id] = check;
         }
@@ -854,8 +857,8 @@ class _NewerFileRow extends ConsumerWidget {
   }
 }
 
-/// Where a mod is in an update run, in the row's status cell (`docs/update-runs.md` §2, §5): a mini bar and the phase,
-/// Answer or Skip beside a question, and an ended job's outcome with its reason under it.
+/// Where a mod is in an update run, in the row's status cell (`docs/update-runs.md` §2, §5, §8): a mini bar and the phase,
+/// Answer beside a question, and an ended job's outcome with its reason or the write's detail under it, and Undo while the rule offers it.
 class _RunStatus extends ConsumerWidget {
   const _RunStatus({required this.mod, required this.run, required this.heldFileDate});
 
@@ -879,15 +882,22 @@ class _RunStatus extends ConsumerWidget {
         (result == null
             ? job.state == DownloadJobState.failed
             : result.end == UpdateModEnd.failed || result.end == UpdateModEnd.refused);
+    // Read only for a mod whose write Undo could take back; the rule is the one the panel reads (`updateUndoProvider`).
+    final wrote = phase == null && result != null && result.hasWrite;
+    final undoOffered = wrote && ref.watch(updateUndoProvider((seq: job.seq, modId: mod.id))) == null;
+    final facts = phase == null ? UpdateFinishedFacts.of(job, mod.id) : null;
 
     Widget? bar;
     Widget? link;
+    Widget? detail;
     String? reason;
     final (String label, Color color) = switch (phase) {
       UpdateAsking() => (updatePhaseLabel(loc, phase), palette.badgeInfo.foreground),
       UpdateStopped() => (updatePhaseLabel(loc, phase), palette.text2),
       UpdateInLine() => (updatePhaseLabel(loc, phase), palette.text3),
       final UpdatePhase working => (updatePhaseLabel(loc, working), palette.text),
+      null when result?.undone ?? false => (loc.t('downloads.update.undone'), palette.text2),
+      null when result?.undoProblem != null => (loc.t('downloads.update.undo_failed'), palette.badgeMissing.foreground),
       null when failed && result == null && job.error is! UpdateFailure => (
           loc.t('library.updates.status.download_failed'),
           palette.badgeMissing.foreground,
@@ -925,9 +935,29 @@ class _RunStatus extends ConsumerWidget {
         bar = const ProgressTrack(value: null, height: 4);
       case UpdateStopped(:final halt):
         reason = updateFailureText(loc, halt.cause);
+      case null when result?.undone ?? false:
+        reason = updateUndoneText(loc, job, result!, heldFileDate: facts!.heldFileDate, nameOf: (id) => _modName(ref, id));
       case null when failed:
         reason = updateFailureText(loc, result?.failure ?? job.error, keptIn: job.archive?.parent.path);
+      case null when wrote:
+        // A press that did nothing keeps what the write did on the row, under why.
+        if (result.undoProblem case final problem?) reason = updateUndoProblemText(loc, problem);
+        final ownUpdate = result.end == UpdateModEnd.written && !result.patchAdded;
+        detail = UpdateFinishedDetail(
+          facts: facts!,
+          modName: _modName(ref, facts.folderId ?? mod.id),
+          lead: ownUpdate ? updateSnapshotText(loc, facts.heldFileDate) : null,
+          alignEnd: true,
+        );
       default:
+    }
+    // The board's quiet Undo beside the outcome, on the row of a mod whose write the rule still lets it take back.
+    if (undoOffered) {
+      link = ZenithLink(
+        loc.t('downloads.update.undo'),
+        onTap: () => unawaited(undoUpdate(ProviderScope.containerOf(context, listen: false), job.seq, mod.id)),
+        style: text.bodySmall?.copyWith(fontWeight: FontWeight.w500, color: palette.text2),
+      );
     }
 
     final style = text.bodySmall?.copyWith(fontWeight: FontWeight.w600, color: color);
@@ -960,6 +990,7 @@ class _RunStatus extends ConsumerWidget {
             textAlign: TextAlign.end,
             style: text.bodySmall?.copyWith(color: palette.text3),
           ),
+        ?detail,
       ],
     );
   }
@@ -969,9 +1000,9 @@ class _RunStatus extends ConsumerWidget {
 String _modName(WidgetRef ref, String modId) =>
     ref.read(modsProvider).where((mod) => mod.id == modId).firstOrNull?.name ?? modId;
 
-/// Over the list while it holds an update run's rows: how many of the run's mods are updated, and Clear finished once
-/// a job has ended without failing, which takes those rows off this page and the Downloads panel. A failed job stays
-/// until Remove from the list in the panel, as it does there.
+/// Over the list while it holds an update run's rows: how many of the run's mods are updated, an undone one not counted,
+/// and Clear finished once a job has ended without failing, which takes those rows off this page and the Downloads panel.
+/// A failed job stays until Remove from the list in the panel, as it does there.
 class _RunLine extends ConsumerWidget {
   const _RunLine({required this.run});
 
@@ -984,7 +1015,7 @@ class _RunLine extends ConsumerWidget {
     final total = run.fold(0, (sum, job) => sum + job.update!.mods.length);
     final updated = run.fold(
       0,
-      (sum, job) => sum + job.modResults.where((result) => result.end == UpdateModEnd.written).length,
+      (sum, job) => sum + job.modResults.where((result) => result.end == UpdateModEnd.written && !result.undone).length,
     );
     return Row(
       mainAxisSize: MainAxisSize.min,

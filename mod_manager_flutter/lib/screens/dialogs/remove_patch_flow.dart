@@ -1,26 +1,18 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as path;
 
 import '../../core/button_working.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../models/mod_download.dart';
-import '../../services/folder_contents.dart';
 import '../../services/log/confirmations.dart';
-import '../../services/mod_manager_service.dart';
-import '../../services/patch_record.dart';
+import '../../services/mod_rollback.dart';
 import '../../services/patch_removal.dart';
-import '../../services/patch_store.dart';
-import '../../services/update_apply/mod_activation_port.dart';
 import '../../services/update_apply/update_applier.dart';
-import '../../services/writes_in_flight.dart';
 import '../../utils/notification_actions.dart';
 import '../../utils/notifications.dart';
-import '../../utils/state_providers.dart';
 import 'restore_snapshot_flow.dart';
 
 /// **Taking a patch out of a mod folder**, from the question to the write.
@@ -57,38 +49,17 @@ Future<bool> removePatchFlow(
   // page has no store keyed by one and no update to check.
   final patchModId = patch.modId!;
 
-  final mods = await container.read(modManagerServiceProvider.future);
-  final modsPath = mods.modsPath;
-  if (modsPath == null) return false;
-  final modFolder = Directory(path.join(modsPath, mod.id));
-
-  final onDisk = await readFolderContents(modFolder);
-  const store = PatchStore();
-  final stored = <String>{
-    for (final file in patch.files)
-      if (await store.holds(
-        modFolder: modFolder,
-        patchModId: patchModId,
-        relativePath: file.path,
-      ))
-        file.path,
-  };
-
-  final plan = planPatchRemoval(
-    origin: mod.origin,
-    patchModId: patchModId,
-    onDisk: onDisk,
-    storedOriginals: stored,
-  );
+  final removal = await preparePatchRemoval(container, mod: mod, patch: patch);
+  if (removal == null) return false;
+  final plan = removal.plan;
 
   if (!context.mounted) return false;
 
   // Nothing to do, and saying so beats a confirmation that would change
   // nothing. The record still goes, because the folder demonstrably does not
   // hold this patch any more.
-  if (!plan.touchesFiles && !plan.leavesPatchBehind) {
-    final removed = await whileWritingMod(container, mod.id, () => _forget(mods, mod, patch));
-    if (removed) forgetUpdateCheck(container, mod.id);
+  if (!removal.touchesFolder) {
+    final removed = await forgetPatchRecord(container, removal);
     if (!context.mounted) return removed;
     notify.note(
       loc.t('mods.remove_patch.already_gone_title'),
@@ -119,40 +90,7 @@ Future<bool> removePatchFlow(
   );
   var ended = false;
   try {
-    final snapshots = container.read(snapshotServiceProvider);
-    final applier = UpdateApplier(
-      snapshots: snapshots,
-      activation: ModManagerActivationPort(mods, leaveOff: (m) => leftOffAfterWrite(container, m)),
-    );
-    // The prune and the record are part of the write, so closing the app waits for them too.
-    final result = await WritesInFlight.shared.track(() async {
-      final result = await work(
-        () => whileWritingMod(
-          container,
-          mod.id,
-          () => applier.removePatch(
-            modName: mod.id,
-            modFolder: modFolder,
-            patchModId: patchModId,
-            plan: plan,
-          ),
-        ),
-      );
-
-      // **Before the success check**, the same as the update path: a snapshot exists the moment the capture succeeded, and the failure branch is where a user needs "Restore a previous version…" to be in the menu.
-      //
-      // Retention runs on the same condition and for the same reason: the snapshot comes before anything is moved, so a removal that failed part-way still added a whole folder to the budget — see §5 of `docs/applying-updates.md`.
-      if (result.snapshot != null) {
-        container.invalidate(modBackupsProvider);
-        await snapshots.prune();
-      }
-      // Read again whatever the `.ini` stamp says, and before the success check: a removal that failed part-way may still have moved files.
-      mods.invalidateKeybinds(mod.id);
-
-      // **The record goes even when some files could not be moved.** What it claims is that this folder holds that patch, and after this it does not — the leftovers are named on screen rather than kept as a claim that would go on offering to update a patch that has been taken out.
-      if (result.success) await whileWritingMod(container, mod.id, () => _forget(mods, mod, patch));
-      return result;
-    });
+    final result = await writePatchRemoval(container, removal, work: work);
 
     if (!result.success) {
       card.update(
@@ -169,13 +107,6 @@ Future<bool> removePatchFlow(
       ended = true;
       return false;
     }
-
-    // The folder's verdict can name the patch's layer, which is gone.
-    forgetUpdateCheck(container, mod.id);
-
-    // Pruning already ran with the snapshot, and the keys were dropped, above.
-    container.invalidate(modBackupsProvider);
-    container.invalidate(libraryProvider);
 
     // The snapshot holds the sidecar as it was, so putting it back brings the patch's record back with its files.
     // Offered on the partial result too: its body already says restoring the previous version undoes it.
@@ -221,25 +152,6 @@ Future<bool> removePatchFlow(
   } finally {
     if (!ended) card.dismiss();
   }
-}
-
-/// Drops the layer and rebuilds the flat patch-file list from what is left.
-///
-/// Both in one write: a `patch_files` still naming a patch that has gone would
-/// have the next base update set aside files nothing owns.
-Future<bool> _forget(
-  ModManagerService mods,
-  ModInfo mod,
-  ModDownload patch,
-) async {
-  final result = await mods.updateModOrigin(
-    mod.id,
-    (current) => current == null
-        ? null
-        // The patch of that page, never its base: one page can be both.
-        : withRebuiltPatchFiles(current.withoutDownload(DownloadKey.patch(patch.modId!))),
-  );
-  return result.ok;
 }
 
 /// What will happen, as counts.

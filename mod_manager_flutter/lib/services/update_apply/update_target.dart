@@ -71,10 +71,19 @@ class UpdateTarget {
 /// one failing leaves the others correctly updated. A single number could not
 /// say which.
 class AppliedUpdate {
-  const AppliedUpdate({required this.mod, required this.result});
+  const AppliedUpdate({required this.mod, required this.result, this.newLayer = false, this.writesStarted});
 
   final ModInfo mod;
   final UpdateApplyResult result;
+
+  /// A patch placed as a new layer above the folder's own, which Take out removes whole.
+  /// False for a write by the wipe, for a placement over the same patch's earlier version,
+  /// and for one into a folder with no layer recorded, where the patch becomes the folder's base.
+  final bool newLayer;
+
+  /// The folder's write counter as this write started, its own count included (`whileWritingModCounted`).
+  /// Null when another write was running on the folder then, or when this one never started.
+  final int? writesStarted;
 }
 
 /// What a write into one or more folders adds up to.

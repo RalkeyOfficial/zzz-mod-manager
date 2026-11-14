@@ -472,6 +472,8 @@ List<DownloadRowAction> _finishedActions(
   bool Function(String modId)? modIsOn,
   bool Function(String modId)? modBeingWritten,
 ) {
+  // An update run's finished row offers Undo in this place, per mod, which reads more than the job (`docs/update-runs.md` §8).
+  if (job.isUpdate) return const [];
   switch (job.outcome) {
     case JobOutcome.installed:
       if (job.installed.length != 1) return const [];

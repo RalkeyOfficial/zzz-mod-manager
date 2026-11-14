@@ -18,7 +18,7 @@ import '../../services/patch_scan.dart';
 import '../../services/platform_service.dart';
 import '../../services/shader_fixes/shader_fixes_service.dart';
 import '../../services/update_apply/update_run_stages.dart';
-import '../../services/update_apply/update_write.dart' show UpdateReport;
+import '../../services/update_apply/update_write.dart' show UpdateReportOf;
 import '../../utils/marketplace_providers.dart';
 import '../../utils/notification_actions.dart';
 import '../../utils/notifications.dart';
@@ -55,12 +55,6 @@ const String kDownloadsDeck = 'downloads';
 
 /// The deck an update run's Working cards are dealt into, a slot of its own beside the downloads' (`docs/update-runs.md` §5).
 const String kUpdatesDeck = 'updates';
-
-/// The key every finished update's Done card is counted on, "3 mods updated".
-const String kUpdatesDoneRepeat = 'update-run-done';
-
-/// The key every update whose file went on top of its mod as a patch is counted on, "Patch added to 3 mods".
-const String kUpdatesPatchRepeat = 'update-run-patch';
 
 /// Returns once no bulk action of the All mods table is running. An enable in the middle of one could break a
 /// character's One at a time, which the bulk action is setting mod by mod; the Library's switches are greyed out
@@ -671,8 +665,8 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
     required UpdateHalt? halt,
   }) {
     final library = {for (final mod in container.read(modsProvider)) mod.id: mod};
-    String nameOf(String modId) => _updateModName(library[modId], job, modId);
-    final report = job.report is UpdateReport ? job.report! as UpdateReport : null;
+    String nameOf(String modId) => updateModName(library[modId], job, modId);
+    final report = job.updateReport;
 
     // A patch put on top replaced no file, so it is told apart from an update: its own card, counted on its own.
     final written = [for (final r in job.modResults) if (r.end == UpdateModEnd.written && !r.patchAdded) r.mod.modId];
@@ -755,12 +749,6 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
       actions: [openDownloadsAction(loc, container)],
     );
   }
-
-  /// [modId]'s name, a mod of [job]: the library's, else the name it had when the job was made, else its folder id.
-  static String _updateModName(ModInfo? mod, DownloadJob job, String modId) =>
-      mod?.name ??
-      job.update?.modIn(modId)?.name ??
-      (modId == job.update?.primary.modId ? job.subject : modId);
 
   /// A download's share, an empty bar for a job in line or held by the halt, and a sweep for the unpack and the write,
   /// which report no share.

@@ -263,24 +263,77 @@ enum UpdateSkipReason {
   /// The file looked like a patch and the user put it into another mod; [UpdateModResult.patchedInto] names it.
   /// This mod keeps its update mark.
   patchAddedElsewhere,
+
+  /// The file was to go as a patch into a folder that an earlier placement of the same job put its patch into, or that an earlier write of the job left part-way.
+  /// Nothing was written; [UpdateModResult.alongWith] names the folder, [UpdateModResult.changedBy] the write that changed it,
+  /// and this mod keeps its update mark (`docs/update-runs.md` §6).
+  changedByThisUpdate,
 }
 
 /// How one mod of an ended update job came out.
 enum UpdateModEnd { written, skipped, refused, failed }
 
+/// Why Undo is not offered on a mod's finished row, or why a press of it did nothing (`docs/update-runs.md` §8).
+enum UpdateUndoProblem {
+  /// The job wrote nothing of this mod that Undo could take back, or it is undone already, or it is no longer in the list.
+  nothingToUndo,
+
+  /// The snapshots of the folder have not been read yet, or are being read again.
+  unknown,
+
+  /// Something is writing the folder now.
+  beingWritten,
+
+  /// The folder is no longer in the library under its id, or holds another mod: renamed or deleted.
+  folderGone,
+
+  /// Something wrote the folder after the job did: its write counter moved, or a newer snapshot of it exists.
+  writtenSince,
+
+  /// The snapshot the job's write took is no longer kept.
+  snapshotGone,
+
+  /// The folder, its record or its snapshots could not be read before anything was written, so nothing was changed.
+  notRead,
+
+  /// The folder as it is could not be saved as a snapshot first, so nothing was changed.
+  notSaved,
+
+  /// The patch's files were no longer in the folder and its record could not be removed: no file was moved.
+  recordNotRemoved,
+
+  /// The restore or the Take out stopped part-way, so the folder is not as it was.
+  partWay,
+}
+
 /// What an ended update job came to for one of its mods.
 class UpdateModResult {
-  const UpdateModResult(this.mod, this.end, {this.skipReason, this.failure, this.alongWith, this.patchedInto});
+  const UpdateModResult(
+    this.mod,
+    this.end, {
+    this.skipReason,
+    this.failure,
+    this.alongWith,
+    this.changedBy,
+    this.patchedInto,
+    this.undone = false,
+    this.undoProblem,
+  });
 
   const UpdateModResult.written(this.mod, {this.patchedInto})
       : end = UpdateModEnd.written,
         skipReason = null,
         failure = null,
-        alongWith = null;
+        alongWith = null,
+        changedBy = null,
+        undone = false,
+        undoProblem = null;
 
-  const UpdateModResult.skipped(this.mod, UpdateSkipReason this.skipReason, {this.alongWith, this.patchedInto})
+  const UpdateModResult.skipped(this.mod, UpdateSkipReason this.skipReason, {this.alongWith, this.changedBy, this.patchedInto})
       : end = UpdateModEnd.skipped,
-        failure = null;
+        failure = null,
+        undone = false,
+        undoProblem = null;
 
   final UpdateMod mod;
   final UpdateModEnd end;
@@ -292,14 +345,44 @@ class UpdateModResult {
   final UpdateFailure? failure;
 
   /// For [UpdateSkipReason.alreadyUpdated]: the folder id of the mod whose job wrote this one, or null.
+  /// For [UpdateSkipReason.changedByThisUpdate]: the folder id of the mod the file was going into.
   final String? alongWith;
+
+  /// For [UpdateSkipReason.changedByThisUpdate]: the folder id of the job's mod whose write changed that folder,
+  /// and whether that write left it part-way.
+  final ({String modId, bool partWay})? changedBy;
 
   /// The folder id the file was placed into as a patch layer: the mod's own for "Patch added",
   /// another mod's for [UpdateSkipReason.patchAddedElsewhere]. Null for a write by the wipe.
   final String? patchedInto;
 
+  /// Undo took this mod's write back.
+  final bool undone;
+
+  /// Why the last press of Undo did nothing, shown as "Couldn't undo" until a press works.
+  final UpdateUndoProblem? undoProblem;
+
   /// The file went on top of this mod's own folder as a patch.
   bool get patchAdded => end == UpdateModEnd.written && patchedInto == mod.modId;
+
+  /// The job wrote a folder for this mod, which Undo could take back: its own, or the one its file went into as a patch.
+  bool get hasWrite => end == UpdateModEnd.written || patchedInto != null;
+
+  /// The file went into another mod's folder as a patch, which is this mod's skip.
+  bool get patchedElsewhere => patchedInto != null && patchedInto != mod.modId;
+
+  /// The same result, undone, or with the reason a press of Undo did nothing.
+  UpdateModResult withUndo({bool undone = false, UpdateUndoProblem? problem}) => UpdateModResult(
+        mod,
+        end,
+        skipReason: skipReason,
+        failure: failure,
+        alongWith: alongWith,
+        changedBy: changedBy,
+        patchedInto: patchedInto,
+        undone: undone,
+        undoProblem: problem,
+      );
 }
 
 /// A run stopped by a failure every later job would share.
@@ -356,14 +439,17 @@ final class UpdateStageWritten extends UpdateStageResult {
   final Object? report;
 }
 
-/// Nothing was written and nothing failed.
+/// None of the job's mods was written and nothing failed.
 /// [results] says what came of each mod.
 /// A mod it leaves out is skipped for [reason] when it is the job's first, and as [UpdateSkipReason.sharedFileNotWritten] otherwise.
 final class UpdateStageSkipped extends UpdateStageResult {
-  const UpdateStageSkipped(this.reason, {this.results = const <UpdateModResult>[]});
+  const UpdateStageSkipped(this.reason, {this.results = const <UpdateModResult>[], this.report});
 
   final UpdateSkipReason reason;
   final List<UpdateModResult> results;
+
+  /// What a write did all the same, opaque to the queue (`UpdateReport`): a patch put into another mod, which is this job's mod's skip.
+  final Object? report;
 }
 
 /// [failure] is the job's: the one that matters most when several mods failed.
