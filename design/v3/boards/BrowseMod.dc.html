@@ -107,8 +107,8 @@ a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
     <div style="display: flex; align-items: center; gap: 8px; padding: 14px 32px; border-bottom: 1px solid #1E2024; font-size: 12px">
       <a class="btn btn-ghost btn-sm ibtn" href="Browse.dc.html" aria-label="Back to Browse"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg></a>
       <a class="crumb" href="Browse.dc.html">Browse</a><span style="color: #4A4E57">/</span>
-      <a class="crumb" href="Browse.dc.html">Ellen Joe</a><span style="color: #4A4E57">/</span>
-      <span>Victorian Ballgown</span>
+      <a class="crumb" href="Browse.dc.html">{{crumbMid}}</a><span style="color: #4A4E57">/</span>
+      <span>{{title}}</span>
       <a class="btn btn-ghost btn-sm" href="https://gamebanana.com" style="margin-left: auto">Open on GameBanana<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6"></path><path d="M20 4 11 13"></path><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"></path></svg></a>
     </div>
 
@@ -116,7 +116,7 @@ a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
       <div style="flex: 3 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 22px">
         <div style="display: flex; flex-direction: column; gap: 8px">
           <div class="t-ether" style="position: relative; aspect-ratio: 16 / 9; border-radius: 14px; border: 1px solid #23262B; overflow: hidden">
-            <span class="disp" aria-hidden="true" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) skewX(-8deg); font-size: 130px; font-weight: 800; color: transparent; -webkit-text-stroke: 1px rgba(255,255,255,.12)">VB</span>
+            <span class="disp" aria-hidden="true" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) skewX(-8deg); font-size: 130px; font-weight: 800; color: transparent; -webkit-text-stroke: 1px rgba(255,255,255,.12)">{{ini}}</span>
             <span class="mono" style="position: absolute; right: 14px; bottom: 10px; font-size: 11px; color: rgba(255,255,255,.4)">[screenshot 1 / 6]</span>
           </div>
           <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px">
@@ -130,8 +130,8 @@ a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
         </div>
         <section class="prose" style="display: flex; flex-direction: column; gap: 4px">
           <h2 style="font-size: 15px; font-weight: 600; margin-bottom: 8px">About this mod</h2>
-          <p>A full Victorian ballgown for Ellen with a layered skirt, lace gloves and a matching ribbon on the tail. Works in the overworld, combat and cutscenes.</p>
-          <p>Toggles: <span class="kbd">Alt</span> <span class="kbd">1</span> gloves on or off, <span class="kbd">Alt</span> <span class="kbd">2</span> cycles three ribbon colours.</p>
+          <p>{{about}}</p>
+          <sc-if value="{{notAddon}}" hint-placeholder-val="{{true}}"><p>Toggles: <span class="kbd">Alt</span> <span class="kbd">1</span> gloves on or off, <span class="kbd">Alt</span> <span class="kbd">2</span> cycles three ribbon colours.</p></sc-if>
           <span style="font-size: 12px; color: #80858F">Text and images come from the GameBanana page.</span>
         </section>
         <section style="display: flex; flex-direction: column; gap: 10px">
@@ -151,14 +151,27 @@ a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
 
       <aside style="flex: 2 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 18px; padding: 20px; border-radius: 16px; border: 1px solid #23262B; background: #121316">
         <div style="display: flex; flex-direction: column; gap: 8px">
-          <div style="display: flex; gap: 6px"><span class="badge b-info">Character</span><span class="badge b-off">Ellen Joe</span></div>
-          <h1 class="disp" style="font-size: 24px; font-weight: 700; line-height: 1.15">Victorian Ballgown</h1>
-          <span style="color: #A9ADB5">by <a href="BrowseCreator.dc.html" title="All mods by lacequeen">lacequeen</a> · updated 5 days ago</span>
+          <div style="display: flex; gap: 6px"><span class="badge b-info">{{cat}}</span><span class="badge b-off">{{tag}}</span></div>
+          <h1 class="disp" style="font-size: 24px; font-weight: 700; line-height: 1.15">{{title}}</h1>
+          <span style="color: #A9ADB5">by <a href="BrowseCreator.dc.html" title="All mods by {{author}}">{{author}}</a> · updated 5 days ago</span>
           <div style="display: flex; gap: 16px; color: #80858F; font-size: 12px; padding-top: 2px">
             <span>1.6k likes</span><span>18k downloads</span><span>214 MB</span>
           </div>
         </div>
 
+        <sc-if value="{{addon}}" hint-placeholder-val="{{false}}">
+          <div style="display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 12px; border: 1px solid color-mix(in srgb,var(--ac) 40%,#23262B); background: color-mix(in srgb,var(--ac) 6%,#101114)">
+            <div style="display: flex; align-items: center; gap: 10px">
+              <svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--ac)"><path d="M9 4.5h3.5a2 2 0 1 1 3.5 1.4V9h3.5v3.5a2 2 0 1 0 0 3.5V19.5H16a2 2 0 1 0-3.5 0H9V16a2 2 0 1 1 0-3.5V9H5.5V5.9A2 2 0 1 1 9 4.5z"></path></svg>
+              <b style="font-weight: 600">Zenith supports this as an addon</b>
+            </div>
+            <p style="color: #C9CCD2; line-height: 1.6">Install it from Addons. There Zenith turns on its shader cache so the game doesn't stutter, and keeps it from running together with Censor Remover.</p>
+            <a class="btn btn-pri" href="Addons.dc.html" style="height: 44px; font-size: 14px">Open in Addons</a>
+            <span style="font-size: 12px; color: #80858F">It can't be installed as an ordinary mod.</span>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{notAddon}}" hint-placeholder-val="{{true}}">
         <div style="display: flex; flex-direction: column; gap: 8px">
           <span class="lbl">Install for</span>
           <button class="file on" style="align-items: center">
@@ -192,6 +205,7 @@ a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
 
         <a class="btn btn-pri" href="Downloads.dc.html" style="height: 44px; font-size: 14px"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 10 5 5 5-5"></path><path d="M5 20h14"></path></svg>{{installLbl}}</a>
         <p style="font-size: 12px; color: #80858F; text-align: center">Each file becomes its own mod under Ellen Joe.</p>
+        </sc-if>
       </aside>
     </div>
   </main>
@@ -205,7 +219,7 @@ a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
 </footer>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#A98BFF","options":["#A98BFF","#F3EFEB","#C8F031","#5FE1D9"]},"$preview":{"width":1440,"height":900}}'>
+<script type="text/x-dc" data-dc-script data-props='{"page":{"editor":"enum","default":"Ordinary mod","options":["Ordinary mod","Supported addon"]},"accent":{"editor":"color","default":"#A98BFF","options":["#A98BFF","#F3EFEB","#C8F031","#5FE1D9"]},"$preview":{"width":1440,"height":900}}'>
 class Component extends DCLogic {
   constructor(props) {
     super(props);
@@ -228,8 +242,20 @@ class Component extends DCLogic {
       };
     });
     const n = p.length;
+    // A mod Zenith supports as an addon installs only from the Addons page; its page here says so.
+    const addon = (this.props.page ?? 'Ordinary mod') === 'Supported addon';
     return {
       accent: this.props.accent ?? '#A98BFF',
+      addon, notAddon: !addon,
+      title: addon ? 'ZZMI RabbitFX - Glow FX + Censor Remover' : 'Victorian Ballgown',
+      crumbMid: addon ? 'Other/Misc' : 'Ellen Joe',
+      cat: addon ? 'Other/Misc' : 'Character',
+      tag: addon ? 'Addon' : 'Ellen Joe',
+      author: addon ? 'caverabbit' : 'lacequeen',
+      ini: addon ? 'RFX' : 'VB',
+      about: addon
+        ? 'RabbitFX lets other mods add glow and effects, and has its own censor remover. Only one RabbitFX may exist in your mods folder: two copies crash the game.'
+        : 'A full Victorian ballgown for Ellen with a layered skirt, lace gloves and a matching ribbon on the tail. Works in the overworld, combat and cutscenes.',
       files,
       installLbl: n === 0 ? 'Pick a file' : (n === 1 ? 'Install 1 file' : 'Install ' + n + ' files')
     };

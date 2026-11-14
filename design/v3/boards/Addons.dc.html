@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Addons</title>
+<script src="../../runtime/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Unbounded:wght@500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#060708}
+a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
+.app,.app *{box-sizing:border-box}
+.app{font-family:'Geist',system-ui,sans-serif;color:#ECEDEE;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+:where(.app) :where(button,input,textarea){font:inherit;color:inherit}
+.app h1,.app h2,.app h3,.app p{margin:0}
+.disp{font-family:'Unbounded','Geist',sans-serif;letter-spacing:-0.01em}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.logo{width:26px;height:26px;display:block;flex:none;object-fit:contain}
+.winbtn{width:46px;height:44px;display:grid;place-items:center;background:transparent;border:0;color:#A9ADB5;cursor:pointer}
+.winbtn:hover{background:#1A1C20}.winbtn.x:hover{background:#C4352B;color:#fff}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:8px;border:1px solid #363A42;background:#1A1C20;color:#ECEDEE;font-weight:500;font-size:13px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn:hover{background:#24272C;color:#ECEDEE}
+.btn-pri{background:var(--ac);border-color:var(--ac);color:#0B0C0E;font-weight:600}
+.btn-pri:hover{background:var(--ac);color:#0B0C0E;filter:brightness(1.08)}
+.btn-ghost{background:transparent;border-color:transparent;color:#A9ADB5}
+.btn-up{background:#3A2A0C;border-color:#6A4C14;color:#FFC870;font-weight:600}
+.btn-up:hover{background:#4A360F;color:#FFC870}
+.btn-sm{height:30px;padding:0 10px;font-size:12px;border-radius:7px}
+.ibtn{width:36px;padding:0}.btn-sm.ibtn{width:30px}
+.badge{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;font-size:11px;font-weight:600;letter-spacing:.02em;white-space:nowrap}
+.b-on{background:var(--ac);color:#0B0C0E}
+.b-off{background:#1A1C20;color:#A9ADB5;border:1px solid #2A2D33}
+.b-up{background:#3A2A0C;color:#FFC870;border:1px solid #6A4C14}
+.b-new{background:rgba(11,12,14,.72);color:#C9CCD2;border:1px solid #2A2D33}
+.sw{position:relative;width:38px;height:22px;border-radius:999px;border:1px solid #3A3E46;background:#22252A;cursor:pointer;padding:0;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#80858F;transition:left .15s}
+.sw.on{background:var(--ac);border-color:var(--ac)}
+.sw.on::after{left:19px;background:#0B0C0E}
+.field{display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;border-radius:8px;border:1px solid #2F3239;background:#101114;color:#80858F}
+.kbd{font-family:'Geist Mono',monospace;font-size:11px;line-height:1;padding:3px 6px;border-radius:5px;border:1px solid #3A3E46;border-bottom-width:2px;background:#1A1C20;color:#C9CCD2;white-space:nowrap}
+.lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#80858F}
+.nav{display:flex;align-items:center;gap:12px;height:38px;padding:0 12px;border-radius:8px;color:#A9ADB5;text-decoration:none;font-weight:500}
+.nav:hover{background:#17191D;color:#ECEDEE}
+.nav.cur{background:#1C1F24;color:#ECEDEE;box-shadow:inset 0 0 0 1px #2A2D33}
+.nav.cur .i{color:var(--ac)}
+.nav .n{margin-left:auto;font-family:'Geist Mono',monospace;font-size:11px;color:#80858F}
+.nav .n.hot{background:#3A2A0C;color:#FFC870;padding:1px 6px;border-radius:5px}
+.nav .n.att{display:inline-flex;align-items:center;gap:4px;background:#3A2A0C;color:#FFC870;padding:1px 6px 1px 5px;border-radius:5px;font-weight:600}
+.nav .n.att .i{width:12px;height:12px;stroke-width:2.2}
+.sk{background:#15171A;border-radius:8px}
+
+/* the addon card */
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.card{position:relative;display:flex;flex-direction:column;border-radius:14px;border:1px solid #23262B;background:#121316;overflow:hidden}
+.card.on{border-color:color-mix(in srgb,var(--ac) 55%,#23262B)}
+.banner{position:relative;height:118px;overflow:hidden;border-bottom:1px solid #1E2024;background-size:9px 9px}
+.banner .glyph{position:absolute;right:-6px;bottom:-26px;font-family:'Unbounded',sans-serif;font-size:104px;font-weight:800;line-height:1;color:transparent;-webkit-text-stroke:1px rgba(255,255,255,.14);transform:skewX(-8deg);letter-spacing:-.02em}
+.banner .tags{position:absolute;left:12px;top:12px;display:flex;gap:6px}
+.g-rabbit{background-color:#1D1029;background-image:radial-gradient(#432459 1.1px,transparent 1.3px)}
+.g-censor{background-color:#0E1D25;background-image:radial-gradient(#1F4556 1.1px,transparent 1.3px)}
+.g-wipe{background-color:#25130D;background-image:radial-gradient(#552B19 1.1px,transparent 1.3px)}
+.g-viewer{background-color:#0F1730;background-image:radial-gradient(#243F73 1.1px,transparent 1.3px)}
+.g-touch{background-color:#221E0D;background-image:radial-gradient(#4F4519 1.1px,transparent 1.3px)}
+.g-reshade{background-color:#15171A;background-image:radial-gradient(#2C3038 1.1px,transparent 1.3px)}
+.cbody{flex:1;display:flex;flex-direction:column;gap:8px;padding:14px 16px 12px}
+.cname{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.cname b{font-weight:600;font-size:15px}
+.cname span{font-size:12px;color:#80858F;white-space:nowrap}
+.desc{color:#A9ADB5;font-size:12px;line-height:1.55}
+.note{display:flex;align-items:flex-start;gap:7px;font-size:12px;color:#80858F}
+.note .i{width:14px;height:14px;margin-top:1px}
+.note.ok{color:#A9ADB5}.note.ok .i{color:var(--ac)}
+.vers{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-radius:10px;border:1px solid #23262B;background:#0F1012}
+.seg{display:flex;padding:3px;border-radius:9px;background:#0B0C0E;border:1px solid #23262B}
+.seg button{flex:1;height:26px;border:0;border-radius:6px;background:transparent;color:#A9ADB5;font-size:12px;font-weight:500;cursor:pointer}
+.seg button.on{background:#24272C;color:#ECEDEE;box-shadow:inset 0 0 0 1px #363A42}
+.cfoot{display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;border-top:1px solid #1E2024;min-height:52px}
+.cfoot .st{font-size:12px;color:#A9ADB5}
+.cfoot .grow{flex:1}
+.pbar{height:6px;border-radius:99px;background:#22252A;overflow:hidden}
+.pbar span{display:block;height:100%;background:var(--ac);border-radius:99px;transition:width .15s linear}
+.warn{display:flex;align-items:flex-start;gap:10px;padding:10px 12px 10px 16px;border-top:1px solid #5A4215;background:#17120A;color:#E6D3B3;font-size:12px}
+.warn .i{color:#FFC870;width:14px;height:14px;margin-top:2px}
+.ask{display:flex;align-items:center;gap:16px;padding:14px 16px;border-radius:12px;border:1px solid #1F4468;background:#0D1622}
+.ask .ic{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:#0F2236;color:#9CCBFF;flex:none}
+
+/* menu and dialogs */
+.menu{position:absolute;right:10px;bottom:48px;z-index:4;display:flex;flex-direction:column;min-width:200px;padding:6px;border-radius:12px;border:1px solid #30333A;background:#1B1D21;box-shadow:0 16px 40px rgba(0,0,0,.5)}
+.menu button,.menu a{all:unset;cursor:pointer;display:flex;align-items:center;gap:10px;height:32px;padding:0 10px;border-radius:7px;font-size:12px;color:#ECEDEE}
+.menu button:hover,.menu a:hover{background:#2A2D33}
+.menu .danger{color:#FF9A8E}
+.dim{position:absolute;inset:0;background:rgba(4,5,6,.72);z-index:5}
+.dlg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:6;width:540px;max-width:calc(100% - 32px);display:flex;flex-direction:column;border-radius:18px;background:#0F1012;border:1px solid #2A2D33;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.dhead{display:flex;align-items:center;gap:14px;padding:20px 24px 14px}
+.dbody{display:flex;flex-direction:column;gap:12px;padding:0 24px 18px}
+.dfoot{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:14px 24px;border-top:1px solid #1E2024}
+.set{display:flex;align-items:flex-start;gap:16px;padding:14px 16px;border-radius:12px;border:1px solid #23262B;background:#121316}
+.set .t{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.set .t b{font-weight:600}
+.set .t span{font-size:12px;color:#80858F;line-height:1.55}
+.where{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:12px;border:1px solid #23262B;background:#0B0C0E;font-size:12px;color:#A9ADB5}
+.where .mono{font-size:11px;color:#C9CCD2}
+
+/* shared by the calm variants */
+.tile{position:relative;overflow:hidden;width:40px;height:40px;border-radius:10px;flex:none;display:grid;place-items:center;border:1px solid #23262B;background-size:6px 6px}
+.tile span{font-family:'Unbounded',sans-serif;font-weight:800;font-size:12px;color:#ECEDEE;letter-spacing:-.02em}
+.ib{width:30px;height:30px;border-radius:7px;border:0;background:transparent;color:#80858F;display:grid;place-items:center;cursor:pointer;padding:0;flex:none}
+.ib:hover{background:#1E2125;color:#ECEDEE}
+.vsel{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 8px 0 10px;border-radius:7px;border:1px solid #2F3239;background:#15171A;color:#C9CCD2;font-size:12px;cursor:pointer}
+.vmenu{position:absolute;left:0;top:36px;z-index:4;display:flex;flex-direction:column;width:280px;padding:6px;border-radius:12px;border:1px solid #30333A;background:#1B1D21;box-shadow:0 16px 40px rgba(0,0,0,.5)}
+.vmenu button{all:unset;cursor:pointer;display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:7px}
+.vmenu button:hover{background:#2A2D33}
+.vmenu .vt{flex:1;display:flex;flex-direction:column;gap:2px}
+.vmenu .vt b{font-weight:600;font-size:12px}
+.vmenu .vt span{font-size:12px;color:#80858F;line-height:1.45}
+.vmenu .i{color:var(--ac)}
+.work{display:flex;flex-direction:column;gap:5px;width:150px}
+.work .wl{font-size:12px;color:#A9ADB5}
+.wline{display:flex;align-items:flex-start;gap:8px;font-size:12px;color:#E6D3B3;line-height:1.5}
+.wline .i{width:14px;height:14px;color:#FFC870;margin-top:2px}
+.wline a{color:#FFC870}
+
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.sc{position:relative;display:flex;flex-direction:column;border-radius:14px;border:1px solid #23262B;background:#121316}
+.sc .banner{height:150px;border-radius:13px 13px 0 0}
+.sc .banner .ph{position:absolute;right:12px;bottom:10px;font-family:'Geist Mono',monospace;font-size:11px;color:rgba(255,255,255,.4)}
+.sc .sbody{flex:1;display:flex;flex-direction:column;gap:10px;padding:14px 16px 12px}
+.sc .top{display:flex;align-items:center;gap:12px}
+.sc .nm{flex:1;min-width:0;display:flex;flex-direction:column}
+.sc .nm b{font-weight:600;font-size:14px}
+.sc .nm span{font-size:12px;color:#80858F}
+.sc .desc{color:#A9ADB5;font-size:12px;line-height:1.55;min-height:37px}
+.sc .foot{display:flex;align-items:center;gap:8px;min-height:30px}
+.sc .foot .grow{flex:1}
+.sc .menu{bottom:auto;top:calc(100% - 8px)}
+</style>
+</helmet>
+<div class="app" style="--ac: {{accent}}; position: relative; width: 100%; min-height: 900px; background: #0B0C0E; display: flex; flex-direction: column; overflow: hidden">
+
+<header style="display: flex; align-items: center; gap: 16px; height: 44px; padding-left: 16px; border-bottom: 1px solid #1E2024; background: #0A0B0D; flex: none">
+  <div style="display: flex; align-items: center; gap: 10px; width: 200px">
+    <img class="logo" src="../../../mod_manager_flutter/assets/brand/logo-mark-on-dark.png" alt="Zenith">
+    <span class="disp" style="font-weight: 700; letter-spacing: .08em">ZENITH</span>
+  </div>
+  <a href="Palette.dc.html" class="field" style="width: 440px; max-width: 40%; height: 30px; margin: 0 auto; text-decoration: none; cursor: pointer">
+    <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+    <span style="flex: 1; font-size: 12px">Search mods, characters and actions</span>
+    <span class="kbd">Ctrl K</span>
+  </a>
+  <div style="display: flex">
+    <button class="winbtn" aria-label="Minimize"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"></path></svg></button>
+    <button class="winbtn" aria-label="Maximize"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1.5"></rect></svg></button>
+    <button class="winbtn x" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+  </div>
+</header>
+
+<div style="flex: 1; display: flex; flex-wrap: wrap; min-height: 0">
+  <nav aria-label="Main" style="flex: 0 0 216px; display: flex; flex-direction: column; gap: 2px; padding: 14px 10px; border-right: 1px solid #1E2024; background: #0A0B0D">
+    <span class="lbl" style="padding: 6px 12px 8px">Library</span>
+    <a class="nav" href="Main.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"></rect><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"></rect><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"></rect><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"></rect></svg>Characters<span class="n">48</span></a>
+    <a class="nav" href="AllMods.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"></path></svg>All mods<span class="n">61</span></a>
+    <a class="nav" href="Updates.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="m8.5 12 3.5-3.5 3.5 3.5M12 8.5V16"></path></svg>Updates<span class="n hot">3</span></a>
+    <a class="nav" href="Loadouts.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.5 8.5 4.5-8.5 4.5L3.5 8z"></path><path d="m3.5 12.5 8.5 4.5 8.5-4.5"></path><path d="m3.5 16.5 8.5 4.5 8.5-4.5"></path></svg>Loadouts<span class="n">4</span></a>
+    <a class="nav cur" href="Addons.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4.5h3.5a2 2 0 1 1 3.5 1.4V9h3.5v3.5a2 2 0 1 0 0 3.5V19.5H16a2 2 0 1 0-3.5 0H9V16a2 2 0 1 1 0-3.5V9H5.5V5.9A2 2 0 1 1 9 4.5z"></path></svg>Addons<span class="n">{{onCount}}</span></a>
+    <span class="lbl" style="padding: 18px 12px 8px">GameBanana</span>
+    <a class="nav" href="Browse.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="m15.5 8.5-2 5-5 2 2-5z"></path></svg>Browse</a>
+    <a class="nav" href="Downloads.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 10 5 5 5-5"></path><path d="M5 20h14"></path></svg>Downloads</a>
+    <div style="margin-top: auto; display: flex; flex-direction: column; gap: 10px">
+      <div style="padding: 12px; border-radius: 12px; background: #121316; border: 1px solid #23262B; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; align-items: center; gap: 8px">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--ac); box-shadow: 0 0 0 3px color-mix(in srgb,var(--ac) 25%,transparent)"></span>
+          <span style="font-weight: 600; font-size: 12px">ZZMI connected</span>
+        </div>
+        <span style="color: #A9ADB5; font-size: 12px">14 mods active · press <span class="kbd">F10</span> in game after changes</span>
+        <button class="btn btn-pri" style="width: 100%; height: 40px"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="fill: currentColor; stroke: none"><path d="M8 5v14l11-7z"></path></svg>Launch game</button>
+      </div>
+      <a class="nav" href="Settings.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"></path><circle cx="15" cy="6" r="2"></circle><circle cx="9" cy="12" r="2"></circle><circle cx="17" cy="18" r="2"></circle></svg>Settings</a>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; padding: 28px 32px 32px; display: flex; flex-direction: column; gap: 20px">
+    <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap">
+      <div style="display: flex; flex-direction: column; gap: 6px; max-width: 640px">
+        <h1 class="disp" style="font-size: 24px; font-weight: 700">Addons</h1>
+        <span style="color: #A9ADB5">Mods Zenith installs, sets up and keeps from clashing for you.</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span style="font-size: 12px; color: #80858F">Checked for updates 5 minutes ago</span>
+        <button class="btn"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3L19.5 9"></path><path d="M19.5 4.5V9H15"></path></svg>Check now</button>
+      </div>
+    </div>
+
+    <sc-if value="{{adopt}}" hint-placeholder-val="{{false}}">
+      <div class="ask" role="region" aria-label="Addons already in your library">
+        <span class="ic"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4.5h3.5a2 2 0 1 1 3.5 1.4V9h3.5v3.5a2 2 0 1 0 0 3.5V19.5H16a2 2 0 1 0-3.5 0H9V16a2 2 0 1 1 0-3.5V9H5.5V5.9A2 2 0 1 1 9 4.5z"></path></svg></span>
+        <span style="flex: 1; display: flex; flex-direction: column; gap: 2px">
+          <b style="font-weight: 600">2 of these are already in your library</b>
+          <span style="font-size: 12px; color: #A9ADB5">RabbitFX and Agent Viewer were installed as ordinary mods. Moved here, Zenith sets them up and keeps them apart from what clashes. They stay on or off as they are.</span>
+        </span>
+        <button class="btn btn-ghost btn-sm" onClick="{{dismissAdopt}}">Not now</button>
+        <button class="btn btn-pri btn-sm" onClick="{{doAdopt}}">Move them here</button>
+      </div>
+    </sc-if>
+
+    <div class="cards">
+      <sc-for list="{{cards}}" as="c" hint-placeholder-count="6">
+        <article class="sc" aria-label="{{c.name}}">
+          <div class="{{c.banner}}"><span class="glyph" aria-hidden="true">{{c.glyph}}</span><span class="ph">[preview image]</span></div>
+          <div class="sbody">
+            <div class="top">
+              <span class="nm"><b>{{c.name}}</b><span>{{c.by}}</span></span>
+              <sc-if value="{{c.fHave}}" hint-placeholder-val="{{true}}"><button class="{{c.swCls}}" aria-pressed="{{c.pressed}}" aria-label="{{c.swLbl}}" onClick="{{c.toggle}}"></button></sc-if>
+            <sc-if value="{{c.fInstall}}" hint-placeholder-val="{{false}}"><button class="btn btn-sm" onClick="{{c.install}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 10 5 5 5-5"></path><path d="M5 20h14"></path></svg>Install</button></sc-if>
+            </div>
+            <p class="desc">{{c.desc}}</p>
+            <sc-if value="{{c.hasWarn}}" hint-placeholder-val="{{false}}"><span class="wline"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4 2.8 19.5h18.4z"></path><path d="M12 10v4.5M12 17v.01"></path></svg><span>Another RabbitFX is inside Neon Rider Jacket, and two copies crash the game. <a href="ModPage.dc.html">Show it</a></span></span></sc-if>
+            <sc-if value="{{c.hasFoot}}" hint-placeholder-val="{{true}}">
+            <div class="foot">
+              <sc-if value="{{c.fWork}}" hint-placeholder-val="{{false}}"><span class="work"><span class="wl">{{c.workLbl}}</span><span class="pbar"><span style="width: {{c.pct}}"></span></span></span></sc-if>
+              <sc-if value="{{c.tUp}}" hint-placeholder-val="{{false}}"><button class="btn btn-up btn-sm" onClick="{{c.update}}">Update</button></sc-if>
+              <sc-if value="{{c.showVers}}" hint-placeholder-val="{{false}}"><span style="position: relative"><button class="vsel" aria-haspopup="menu" aria-expanded="{{c.vExp}}" onClick="{{c.vToggle}}">{{c.vLbl}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px; color: #80858F"><path d="m6 9 6 6 6-6"></path></svg></button>
+              <sc-if value="{{c.vOpen}}" hint-placeholder-val="{{false}}"><span class="vmenu" role="menu">
+                <sc-for list="{{c.vers}}" as="v" hint-placeholder-count="2"><button role="menuitemradio" aria-checked="{{v.checked}}" onClick="{{v.pick}}"><span class="vt"><b>{{v.name}}</b><span>{{v.sub}}</span></span><sc-if value="{{v.on}}" hint-placeholder-val="{{false}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg></sc-if></button></sc-for>
+              </span></sc-if></span></sc-if>
+              <span class="grow"></span>
+              <sc-if value="{{c.showGear}}" hint-placeholder-val="{{false}}"><button class="ib" aria-label="{{c.gearLbl}}" title="Settings" onClick="{{c.gear}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></svg></button></sc-if>
+            <sc-if value="{{c.fHave}}" hint-placeholder-val="{{true}}"><button class="ib" aria-label="More for {{c.name}}" onClick="{{c.more}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h.01M12 12h.01M18 12h.01" style="stroke-width: 3"></path></svg></button></sc-if>
+            </div>
+            </sc-if>
+          </div>
+          <sc-if value="{{c.menuOpen}}" hint-placeholder-val="{{false}}">
+            <div class="menu" role="menu">
+              <a href="BrowseMod.dc.html" role="menuitem">{{c.pageLbl}}</a>
+              <button role="menuitem">Open its folder</button>
+              <button role="menuitem" class="danger" onClick="{{c.remove}}">Uninstall</button>
+            </div>
+          </sc-if>
+        </article>
+      </sc-for>
+    </div>
+  </main>
+</div>
+
+<footer style="display: flex; align-items: center; gap: 18px; height: 28px; padding: 0 16px; border-top: 1px solid #1E2024; background: #0A0B0D; color: #80858F; font-size: 11px; flex: none">
+  <span class="mono">ZZMI · ~/Games/XXMI/ZZMI</span>
+  <span>14 links active</span>
+  <span>Watching library for changes</span>
+  <span style="margin-left: auto" class="mono">v3.0.0</span>
+</footer>
+
+<sc-if value="{{dlgClash}}" hint-placeholder-val="{{false}}">
+  <div class="dim" onClick="{{closeDlg}}"></div>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="clash-title">
+    <div class="dhead">
+      <span class="{{k.banner}}" style="width: 56px; height: 40px; border-radius: 8px; flex: none; border: 1px solid #23262B; background-size: 7px 7px"></span>
+      <h2 id="clash-title" style="flex: 1; font-size: 17px; font-weight: 600">{{k.title}}</h2>
+    </div>
+    <div class="dbody">
+      <p style="color: #C9CCD2; line-height: 1.6">{{k.body}}</p>
+      <span style="font-size: 12px; color: #80858F">{{k.note}}</span>
+    </div>
+    <div class="dfoot">
+      <button class="btn btn-ghost" onClick="{{closeDlg}}">{{k.keep}}</button>
+      <button class="btn btn-pri" onClick="{{confirmClash}}">{{k.go}}</button>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{dlgSet}}" hint-placeholder-val="{{false}}">
+  <div class="dim" onClick="{{closeDlg}}"></div>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="set-title">
+    <div class="dhead">
+      <span class="{{s.banner}}" style="width: 56px; height: 40px; border-radius: 8px; flex: none; border: 1px solid #23262B; background-size: 7px 7px"></span>
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 2px">
+        <h2 id="set-title" style="font-size: 17px; font-weight: 600">{{s.title}}</h2>
+        <span style="font-size: 12px; color: #80858F">{{s.sub}}</span>
+      </div>
+      <button class="btn btn-ghost btn-sm ibtn" aria-label="Close" onClick="{{closeDlg}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+    </div>
+    <div class="dbody">
+      <sc-if value="{{s.rabbit}}" hint-placeholder-val="{{false}}">
+        <div class="set">
+          <span class="t">
+            <b>Shader cache</b>
+            <span>RabbitFX rewrites each shader the first time the game uses it, which makes the game stutter. With the cache on it does this once and keeps the result, so later sessions run smoothly.</span>
+            <span style="color: #A9ADB5">On since Zenith installed RabbitFX. Recommended.</span>
+          </span>
+          <button class="{{s.cacheCls}}" aria-pressed="{{s.cachePressed}}" aria-label="Shader cache" onClick="{{s.toggleCache}}"></button>
+        </div>
+        <sc-if value="{{s.cacheOff}}" hint-placeholder-val="{{false}}">
+          <span style="font-size: 12px; color: #FFC870">With the cache off, the game stutters whenever it meets a shader for the first time, every session.</span>
+        </sc-if>
+      </sc-if>
+      <sc-if value="{{s.censor}}" hint-placeholder-val="{{false}}">
+        <div class="set">
+          <span class="t">
+            <b>No outlines</b>
+            <span>Removes the black outlines from playable characters. In game, <span class="kbd">9</span> turns them back on and off.</span>
+            <span style="color: #A9ADB5">Turning it on downloads the mod's small extra file for it, 2 MB.</span>
+          </span>
+          <button class="{{s.outCls}}" aria-pressed="{{s.outPressed}}" aria-label="No outlines" onClick="{{s.toggleOut}}"></button>
+        </div>
+      </sc-if>
+      <sc-if value="{{s.reshade}}" hint-placeholder-val="{{false}}">
+        <div class="set" style="align-items: center">
+          <span class="t"><b>Menu key</b><span>Opens ReShade's menu in game, where you pick filters and presets.</span></span>
+          <span class="kbd" style="font-size: 12px; padding: 5px 9px">Home</span>
+          <button class="btn btn-sm">Change</button>
+        </div>
+        <div class="set" style="align-items: center">
+          <span class="t"><b>Filters</b><span>18 filters from ReShade's starter set. Presets you download from GameBanana go in this folder too.</span></span>
+          <button class="btn btn-sm"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.5l2 2h7.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path></svg>Open folder</button>
+        </div>
+        <div class="where">
+          <span>ReShade loads through XXMI Launcher. These are all of its files, and Uninstall removes every one. The two next to the game are the only files Zenith ever puts outside ZZMI.</span>
+          <span class="mono">ZZMI/ReShade64.dll, ZZMI/RabbitWrapper.dll</span>
+          <span class="mono">ZenlessZoneZero Game/ReShade.ini, ZenlessZoneZero Game/reshade-shaders</span>
+        </div>
+      </sc-if>
+    </div>
+    <div class="dfoot">
+      <span style="flex: 1; font-size: 12px; color: #80858F">{{s.foot}}</span>
+      <button class="btn btn-pri" onClick="{{closeDlg}}">Done</button>
+    </div>
+  </div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","default":"Mixed","options":["Mixed","Nothing installed","Already in the library","Second RabbitFX found"]},"dialog":{"editor":"enum","default":"None","options":["None","Turn on a clashing addon","RabbitFX settings","Censor Remover settings","ReShade settings"]},"accent":{"editor":"color","default":"#A98BFF","options":["#A98BFF","#F3EFEB","#C8F031","#5FE1D9"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { ov: null, dlg: null, menu: null, adoptGone: false, settings: { cache: true, outlines: false } };
+    this.timers = {};
+  }
+  componentWillUnmount() { Object.values(this.timers).forEach(clearInterval); }
+  // What each addon is, in our own words. GameBanana's long titles stay on its page.
+  addons() {
+    return [
+      { id: 'rabbit', name: 'RabbitFX', by: 'caverabbit', glyph: 'RFX', banner: 'g-rabbit', size: '6 MB',
+        desc: 'Lets mods add glow and other effects, and removes the censoring. Many effect mods need it to show at all.',
+        clashWith: 'censor', setup: 'Shader cache on, so it doesn’t stutter', gear: true },
+      { id: 'censor', name: 'Censor Remover', by: 'summersby', glyph: 'CR', banner: 'g-censor', size: '4 MB',
+        desc: 'Stops characters fading out when the camera gets close. Can also remove their black outlines.',
+        clashWith: 'rabbit', gear: true },
+      { id: 'wipe', name: 'Color Wipeout', by: 'summersby', glyph: 'CW', banner: 'g-wipe', size: '1 MB',
+        desc: 'Keeps the Wipeout effect in colour instead of switching to black and white.' },
+      { id: 'viewer', name: 'Agent Viewer', by: 'HelpMeHelpYou', glyph: 'AV', banner: 'g-viewer', size: '2 MB',
+        desc: 'Move, rotate and zoom agents in the menu, with a green screen for screenshots.' },
+      { id: 'touch', name: 'Touchable Characters', by: 'wlytsgd', glyph: 'TC', banner: 'g-touch', size: '9 MB',
+        desc: 'Touch, drag and poke characters with the mouse. Made by JiggleForge.',
+        versions: [['Original', 'wlytsgd'], ['AMD fix', 'laibowen']] },
+      { id: 'reshade', name: 'ReShade', by: 'crosire', glyph: 'RS', banner: 'g-reshade', size: '8 MB',
+        desc: 'Filters for lighting, shadows and colour, with presets from GameBanana. Opens in game with Home.', gear: true,
+        newTag: 'Uses XXMI Launcher' }
+    ];
+  }
+  // Each addon's state per tweak: phase none | work | on | off, plus update, version and warning.
+  preset() {
+    const st = this.props.state ?? 'Mixed';
+    const s = (phase, extra = {}) => ({ phase, pct: 0, ...extra });
+    if (st === 'Nothing installed') return { rabbit: s('none'), censor: s('none'), wipe: s('none'), viewer: s('none'), touch: s('none', { ver: 0 }), reshade: s('none') };
+    if (st === 'Already in the library') return { rabbit: s('none'), censor: s('none'), wipe: s('none'), viewer: s('none'), touch: s('none', { ver: 0 }), reshade: s('none') };
+    const mixed = { rabbit: s('on', { up: true }), censor: s('off'), wipe: s('none'), viewer: s('work', { pct: 46 }), touch: s('on', { ver: 0 }), reshade: s('none') };
+    if (st === 'Second RabbitFX found') mixed.rabbit = s('on', { warn: true });
+    return mixed;
+  }
+  run(id, done) {
+    clearInterval(this.timers[id]);
+    let p = 0;
+    this.timers[id] = setInterval(() => {
+      p = Math.min(100, p + 9);
+      const ov = { ...this.cur() };
+      ov[id] = { ...ov[id], phase: p < 100 ? 'work' : done, pct: p, up: false };
+      this.setState({ ov });
+      if (p >= 100) clearInterval(this.timers[id]);
+    }, 140);
+  }
+  cur() { return this.state.ov || this.preset(); }
+  renderVals() {
+    const st = this.cur();
+    const list = this.addons();
+    const by = Object.fromEntries(list.map((a) => [a.id, a]));
+    const set = (id, patch) => this.setState({ ov: { ...st, [id]: { ...st[id], ...patch } }, menu: null, vmenu: null });
+    const dlgTweak = this.props.dialog ?? 'None';
+    const dlg = this.state.dlg ?? ({ 'Turn on a clashing addon': 'clash', 'RabbitFX settings': 'rabbit', 'Censor Remover settings': 'censor', 'ReShade settings': 'reshade' }[dlgTweak] || null);
+
+    const cards = list.map((a) => {
+      const s = st[a.id];
+      const ph = s.phase;
+      const on = ph === 'on';
+      const have = ph === 'on' || ph === 'off';
+      const other = a.clashWith ? by[a.clashWith] : null;
+      const clashText = other ? (st[other.id].phase === 'on' ? other.name + ' is on. These two can’t run together.' : 'Can’t run together with ' + other.name + '.') : '';
+      const vi = s.ver ?? 0;
+      return {
+        name: a.name, by: 'by ' + a.by, glyph: a.glyph, banner: 'banner ' + a.banner, tile: 'tile ' + a.banner, desc: a.desc, size: a.size,
+        showVers: !!a.versions && ph !== 'work', vLbl: a.versions ? a.versions[vi][0] : '',
+        vOpen: this.state.vmenu === a.id, vExp: this.state.vmenu === a.id ? 'true' : 'false',
+        vToggle: () => this.setState({ vmenu: this.state.vmenu === a.id ? null : a.id, menu: null }),
+        showGear: !!a.gear && have,
+        hasFoot: ph === 'work' || (have && (!!s.up || !!a.versions || !!a.gear)) || have || (ph === 'none' && !!a.versions),
+        cls: on ? 'card on' : 'card',
+        tOn: on, tOff: ph === 'off', tUp: have && !!s.up, tNew: !!a.newTag && ph === 'none', newTag: a.newTag || '',
+        hasClash: !!other, clash: clashText,
+        hasSetup: !!a.setup && have && this.state.settings.cache, setup: a.setup || '',
+        hasVers: !!a.versions,
+        vers: (a.versions || []).map(([name], k) => ({
+          name, cls: vi === k ? 'on' : '', checked: vi === k ? 'true' : 'false', on: vi === k,
+          sub: k === 0 ? 'by ' + a.versions[0][1] : 'by ' + a.versions[1][1] + ', for AMD graphics cards where the original crashes the game',
+          pick: () => {
+            if (!have || vi === k) { set(a.id, { ver: k }); return; }
+            set(a.id, { ver: k, phase: 'work', pct: 0, op: 'version' });
+            this.run(a.id, ph);
+          }
+        })),
+        versNote: a.versions ? (vi === 1 ? 'By ' + a.versions[1][1] + ', for AMD graphics cards where the original crashes the game.' : 'Pick the AMD fix if the original crashes the game on an AMD graphics card.') : '',
+        hasWarn: !!s.warn,
+        fInstall: ph === 'none', fWork: ph === 'work', fHave: have,
+        workLbl: ({ update: 'Updating', version: 'Switching to the ' + (a.versions ? a.versions[vi][0] : '') }[s.op] || 'Installing') + ' · ' + s.pct + '%', pct: s.pct + '%',
+        swCls: on ? 'sw on' : 'sw', pressed: on ? 'true' : 'false', swLbl: (on ? 'Turn off ' : 'Turn on ') + a.name, stLbl: on ? 'On' : 'Off',
+        hasGear: !!a.gear, gearLbl: a.name + ' settings',
+        gear: () => this.setState({ dlg: a.id, menu: null }),
+        install: () => { set(a.id, { phase: 'work', pct: 0, op: 'install' }); this.run(a.id, 'on'); },
+        update: () => { set(a.id, { phase: 'work', pct: 0, op: 'update' }); this.run(a.id, ph); },
+        toggle: () => {
+          if (!on && other && st[other.id].phase === 'on') { this.setState({ dlg: 'clash', clashId: a.id, menu: null }); return; }
+          set(a.id, { phase: on ? 'off' : 'on' });
+        },
+        more: () => this.setState({ menu: this.state.menu === a.id ? null : a.id, vmenu: null }),
+        menuOpen: this.state.menu === a.id,
+        pageLbl: a.id === 'reshade' ? 'Open reshade.me' : 'Open on GameBanana',
+        remove: () => set(a.id, { phase: 'none', up: false, warn: false })
+      };
+    });
+
+    const settings = this.state.settings;
+    const sInfo = {
+      rabbit: ['RabbitFX settings', 'g-rabbit', 'This setting is a file in RabbitFX’s folder. Zenith moves it for you.'],
+      censor: ['Censor Remover settings', 'g-censor', 'Applies the next time you press F10 in game.'],
+      reshade: ['ReShade settings', 'g-reshade', 'ReShade keeps its own settings in its menu in game.']
+    }[dlg] || ['', '', ''];
+    const s = {
+      title: sInfo[0], banner: sInfo[1], foot: sInfo[2], sub: dlg && by[dlg] ? 'by ' + by[dlg].by : '',
+      rabbit: dlg === 'rabbit', censor: dlg === 'censor', reshade: dlg === 'reshade',
+      cacheCls: settings.cache ? 'sw on' : 'sw', cachePressed: settings.cache ? 'true' : 'false', cacheOff: !settings.cache,
+      toggleCache: () => this.setState({ settings: { ...settings, cache: !settings.cache } }),
+      outCls: settings.outlines ? 'sw on' : 'sw', outPressed: settings.outlines ? 'true' : 'false',
+      toggleOut: () => this.setState({ settings: { ...settings, outlines: !settings.outlines } })
+    };
+
+    // The clash question names the addon being turned on and the one that turns off for it.
+    const winner = this.state.clashId || 'censor';
+    const loser = by[winner].clashWith;
+    const why = {
+      censor: 'RabbitFX removes the censoring in its own way, so the two can’t run together. RabbitFX turns off.',
+      rabbit: 'RabbitFX removes the censoring itself, so it can’t run together with Censor Remover. Censor Remover turns off.'
+    };
+    const k = {
+      banner: by[winner].banner, title: 'Turn on ' + by[winner].name + '?', body: by[loser].name + ' is on. ' + why[winner],
+      note: winner === 'censor' ? 'Glow and effects from mods that need RabbitFX stop showing while it’s off.' : 'Characters’ outlines come back while Censor Remover is off.',
+      keep: 'Keep ' + by[loser].name, go: 'Switch to ' + by[winner].name
+    };
+
+    const stName = this.props.state ?? 'Mixed';
+    return {
+      accent: this.props.accent ?? '#A98BFF',
+      cards, s,
+      onCount: String(list.filter((a) => st[a.id].phase === 'on').length),
+      adopt: stName === 'Already in the library' && !this.state.adoptGone && !this.state.ov,
+      dismissAdopt: () => this.setState({ adoptGone: true }),
+      doAdopt: () => this.setState({ ov: { ...st, rabbit: { phase: 'on', pct: 0 }, viewer: { phase: 'off', pct: 0 } } }),
+      k, dlgClash: dlg === 'clash',
+      dlgSet: dlg === 'rabbit' || dlg === 'censor' || dlg === 'reshade',
+      closeDlg: () => this.setState({ dlg: 'none' }),
+      confirmClash: () => this.setState({ dlg: 'none', ov: { ...st, [loser]: { ...st[loser], phase: 'off' }, [winner]: { ...st[winner], phase: 'on' } } })
+    };
+  }
+}
+</script>
+</body>
+</html>

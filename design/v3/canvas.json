@@ -107,6 +107,15 @@
       "x": 6080,
       "y": 0
     },
+    "Addons.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "title": "Addons",
+      "w": 1440,
+      "x": 7600,
+      "y": 0
+    },
     "Main.dc.html": {
       "expand": "fill",
       "h": 900,
@@ -275,7 +284,7 @@
   "notes": {
     "t1": {
       "kind": "title1",
-      "maxW": 7520,
+      "maxW": 9040,
       "text": "Library",
       "w": 240,
       "x": 0,
@@ -323,6 +332,7 @@
     "AllMods.dc.html",
     "Updates.dc.html",
     "Loadouts.dc.html",
+    "Addons.dc.html",
     "Browse.dc.html",
     "BrowseMod.dc.html",
     "BrowseCreator.dc.html",
